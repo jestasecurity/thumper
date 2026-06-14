@@ -54,7 +54,16 @@ cd ui && npm install && npm run dev                     # → http://localhost:5
 
 Thumper has three components - a **server**, a **dashboard**, and an **endpoint agent** - shipped as a single Docker image. You create tripwires, deploy them to endpoints, and each machine plants unique bait. When a credential is read, the agent sends a signed callback and the server fans out to your configured alert plugins.
 
-See [docs/architecture.md](docs/architecture.md) for the full architecture reference and [docs/plugins.md](docs/plugins.md) for writing your own plugins.
+See [docs/architecture.md](docs/architecture.md) for the full architecture reference.
+
+## Plugins
+
+Alerting and deployment are pluggable - drop a directory under `plugins/{alert,deploy}/` with a `manifest.yaml` and a `plugin.py`, restart the server, and it shows up in the dashboard with a generated config form. No registration code, no imports to edit.
+
+- **Alert plugins** deliver fired-tripwire events to external systems
+- **Deploy plugins** distribute the install command to machines
+
+See [docs/plugins.md](docs/plugins.md) for the full guide.
 
 <p>
 <h2>🌱 Contributing</h2>
