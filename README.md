@@ -44,11 +44,17 @@ That's it. Open the dashboard, create a tripwire, and ship it.
 pip install -e .
 uvicorn thumper.main:app --reload --app-dir server     # → http://localhost:8000
 
-# UI (separate terminal) — Vite proxies /api to the backend
+# UI (separate terminal) - Vite proxies /api to the backend
 cd ui && npm install && npm run dev                     # → http://localhost:5173
 ```
 </details>
 </p>
+
+## Architecture
+
+Thumper has three components - a **server**, a **dashboard**, and an **endpoint agent** - shipped as a single Docker image. You create tripwires, deploy them to endpoints, and each machine plants unique bait. When a credential is read, the agent sends a signed callback and the server fans out to your configured alert plugins.
+
+See [docs/architecture.md](docs/architecture.md) for the full architecture reference and [docs/plugins.md](docs/plugins.md) for writing your own plugins.
 
 <p>
 <h2>🌱 Contributing</h2>

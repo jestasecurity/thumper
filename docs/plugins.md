@@ -4,6 +4,8 @@ Plugins are how Thumper stays a *tool, not a solution*: deployment and alerting
 are pluggable so an org wires Thumper into whatever it already runs. Adding one
 is intentionally trivial - **drop a directory in, get a UI for free.**
 
+## Plugin structure
+
 A plugin is a directory under `plugins/{deploy,alert}/<name>/` with two files:
 
 ```
@@ -13,6 +15,15 @@ plugins/alert/slack/
 ```
 
 No registration, no imports to edit - the loader discovers it on startup.
+
+## Two kinds
+
+| Kind | Contract | Job |
+| --- | --- | --- |
+| **Alert** | `AlertPlugin.alert(event)` | Deliver a fired-tripwire event to an external system |
+| **Deploy** | `DeployPlugin.deploy(install, targets)` | Run the install command on target machines |
+
+A plugin is one or the other, never both.
 
 ## manifest.yaml
 
@@ -36,8 +47,8 @@ config_schema:              # each field becomes a form input in the UI
 
 ## plugin.py
 
-The class **must** be named `Plugin` and is constructed with the saved config dict
-(`self.config`).
+The class **must** be named `Plugin` and extend the appropriate base class.
+It's constructed with the saved config dict (`self.config`).
 
 ### Alert plugin
 
@@ -56,14 +67,10 @@ class Plugin(AlertPlugin):
         httpx.post(url, json={"text": text}, timeout=10).raise_for_status()
 ```
 
-The `event` dict the router passes to `alert()`:
-
-| key | meaning |
-| --- | --- |
-| `alert_id`, `deployment_id`, `tripwire_id`, `endpoint_id` | identifiers |
-| `tripwire_name`, `endpoint_hostname`, `token_type` | display fields |
-| `accessed_path`, `process`, `pid`, `os_user`, `event_type` | enrichment from the endpoint monitor (fs_usage) |
-| `timestamp`, `triggered_by` | when + compact summary |
+The `event` dict carries identifiers (`alert_id`, `tripwire_id`, `endpoint_id`,
+`deployment_id`), display fields (`tripwire_name`, `endpoint_hostname`,
+`token_type`), and enrichment from the endpoint monitor (`accessed_path`,
+`process`, `pid`, `os_user`, `event_type`, `timestamp`).
 
 Raise `PluginError` (or any exception) on failure - the router logs it and keeps
 going; one bad plugin never drops the alert.
