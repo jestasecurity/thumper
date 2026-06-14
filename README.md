@@ -72,6 +72,6 @@ Refer to <a href="CONTRIBUTING.md">CONTRIBUTING.md</a>
 
 <h2>💫 Contributors</h2>
 
-<a href="https://github.com/traceloop/openllmetry/graphs/contributors">
-  <img alt="contributors" src="https://contrib.rocks/image?repo=traceloop/openllmetry"/>
+<a href="https://github.com/jestasecurity/thumper/graphs/contributors">
+  <img alt="contributors" src="https://contrib.rocks/image?repo=jestasecurity/thumper"/>
 </a>
