@@ -50,13 +50,13 @@ cd ui && npm install && npm run dev                     # → http://localhost:5
 </details>
 </p>
 
-## Architecture
+<h2>Architecture</h2>
 
 Thumper has three components - a **server**, a **dashboard**, and an **endpoint agent** - shipped as a single Docker image. You create tripwires, deploy them to endpoints, and each machine plants unique bait. When a credential is read, the agent sends a signed callback and the server fans out to your configured alert plugins.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture reference.
 
-## Plugins
+<h2>Plugins</h2>
 
 Alerting and deployment are pluggable - drop a directory under `plugins/{alert,deploy}/` with a `manifest.yaml` and a `plugin.py`, restart the server, and it shows up in the dashboard with a generated config form.
 
@@ -69,3 +69,9 @@ See [docs/plugins.md](docs/plugins.md) for the full guide.
 <h2>🌱 Contributing</h2>
 Refer to <a href="CONTRIBUTING.md">CONTRIBUTING.md</a>
 </p>
+
+<h2>💫 Contributors</h2>
+
+<a href="https://github.com/traceloop/openllmetry/graphs/contributors">
+  <img alt="contributors" src="https://contrib.rocks/image?repo=traceloop/openllmetry"/>
+</a>
