@@ -58,7 +58,7 @@ See [docs/architecture.md](docs/architecture.md) for the full architecture refer
 
 ## Plugins
 
-Alerting and deployment are pluggable - drop a directory under `plugins/{alert,deploy}/` with a `manifest.yaml` and a `plugin.py`, restart the server, and it shows up in the dashboard with a generated config form. No registration code, no imports to edit.
+Alerting and deployment are pluggable - drop a directory under `plugins/{alert,deploy}/` with a `manifest.yaml` and a `plugin.py`, restart the server, and it shows up in the dashboard with a generated config form.
 
 - **Alert plugins** deliver fired-tripwire events to external systems
 - **Deploy plugins** distribute the install command to machines
