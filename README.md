@@ -1,9 +1,4 @@
 <div align="center">
-  <p>
-    <a href="https://jesta.ai">
-      <img width="150" src="ui/public/thumper_gif.gif" alt="Thumper" />
-    </a>
-  </p>
   <h1>Thumper</h1>
   <p align="center">
   Plant fake-but-realistic credentials where the <a href="https://www.securityweek.com/?s=shai+hulud">Shai-Hulud</a>
