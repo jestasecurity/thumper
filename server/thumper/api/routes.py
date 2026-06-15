@@ -606,7 +606,9 @@ async def trigger(request: Request, background: BackgroundTasks,
         timestamp=data.get("timestamp") or iso_now(),
         triggered_by=data.get("triggered_by"),
     )
-    store.set_deployment_state(db, deployment.id, "planted")
+    # Only a pending deployment becomes planted. A failed one stays failed.
+    if deployment.state == "pending":
+        store.set_deployment_state(db, deployment.id, "planted")
     store.mark_deployment_triggered(db, deployment.id)
 
     background.add_task(deliver_alert, {
