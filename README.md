@@ -48,6 +48,22 @@ uvicorn thumper.main:app --reload --app-dir server     # → http://localhost:80
 cd ui && npm install && npm run dev                     # → http://localhost:5173
 ```
 </details>
+
+<details>
+<summary>Deploy on Kubernetes (Helm)</summary>
+
+A Helm chart lives in [`deploy/helm/thumper`](deploy/helm/thumper). Build and push the image from the `Dockerfile` first, then:
+
+```bash
+helm install thumper ./deploy/helm/thumper \
+  --set image.repository=ghcr.io/jestasecurity/thumper \
+  --set secrets.enrollToken=$(openssl rand -hex 24) \
+  --set secrets.installToken=$(openssl rand -hex 24) \
+  --set config.baseUrl=https://thumper.example.com
+```
+
+Defaults to SQLite on a PVC (single replica). Set `externalDatabase.url` for Postgres/MySQL. See [`values.yaml`](deploy/helm/thumper/values.yaml) for all options.
+</details>
 </p>
 
 <h2>Architecture</h2>

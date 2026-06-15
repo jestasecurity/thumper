@@ -1,0 +1,136 @@
+# Default values for the thumper chart.
+# This is a YAML-formatted file. Values are documented inline.
+
+# -- Number of replicas. KEEP AT 1 with the default SQLite-on-PVC database:
+# the volume is ReadWriteOnce and SQLite (WAL mode) cannot be shared across
+# pods. Only raise this when using an external database (externalDatabase.url).
+replicaCount: 1
+
+image:
+  # -- Container image repository. You must build & push the image from the
+  # repo Dockerfile (e.g. `docker build -t ghcr.io/jestasecurity/thumper:0.1.0 .`).
+  repository: ghcr.io/jestasecurity/thumper
+  # -- Image tag. Defaults to the chart's appVersion when left empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# -- Secrets for pulling the image from a private registry.
+imagePullSecrets: []
+
+# -- Override the chart name / fullname.
+nameOverride: ""
+fullnameOverride: ""
+
+# Non-secret application configuration (rendered into a ConfigMap).
+config:
+  # -- Public URL agents use to reach this server's /api/trigger callback.
+  # MUST be reachable from managed endpoints in production (set to your ingress
+  # host, e.g. https://thumper.example.com). THUMPER_BASE_URL.
+  baseUrl: "http://localhost:8000"
+  # -- Dashboard auto-refresh interval in seconds (0 disables). THUMPER_DASHBOARD_REFRESH.
+  dashboardRefresh: 60
+
+# Sensitive configuration (rendered into a Secret unless existingSecret is set).
+secrets:
+  # -- Shared enrollment token agents present to POST /api/enroll. REQUIRED in
+  # production — leaving this empty (or "dev-enroll-token") is insecure and the
+  # NOTES output will warn about it. THUMPER_ENROLL_TOKEN.
+  enrollToken: ""
+  # -- Admin token gating the installer endpoint (GET /api/install.sh). REQUIRED
+  # in production. THUMPER_INSTALL_TOKEN.
+  installToken: ""
+  # -- Use a pre-existing Secret instead of one managed by this chart. When set,
+  # the chart's Secret is not created and the values above are ignored. The
+  # referenced Secret must provide keys THUMPER_ENROLL_TOKEN, THUMPER_INSTALL_TOKEN
+  # and THUMPER_DB.
+  existingSecret: ""
+
+# External database. Leave url empty to use the bundled SQLite-on-PVC database.
+externalDatabase:
+  # -- Full SQLAlchemy database URL. When set, the PVC is not used and replicas
+  # may be scaled. Examples:
+  #   postgresql+psycopg://user:pass@host:5432/thumper
+  #   mysql+pymysql://user:pass@host:3306/thumper
+  # Stored in the chart Secret because it may embed credentials. THUMPER_DB.
+  url: ""
+
+# Persistent volume for the SQLite database (db + -wal + -shm files).
+persistence:
+  # -- Enable a PersistentVolumeClaim for SQLite. Set false when using
+  # externalDatabase.url.
+  enabled: true
+  # -- Reuse an existing PVC instead of creating one.
+  existingClaim: ""
+  size: 5Gi
+  # -- StorageClass. Empty uses the cluster default.
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  # -- Directory the database lives in (THUMPER_DB becomes
+  # sqlite:///<mountPath>/thumper.db).
+  mountPath: /data
+
+service:
+  type: ClusterIP
+  # -- Service port. Maps to the container's 8000.
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: thumper.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS config, e.g. [{ secretName: thumper-tls, hosts: [thumper.example.com] }]
+  tls: []
+
+serviceAccount:
+  # -- Create a dedicated ServiceAccount.
+  create: true
+  # -- Name to use. Generated from the fullname when empty.
+  name: ""
+  annotations: {}
+
+# -- Pod resource requests/limits.
+resources: {}
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 256Mi
+
+# -- Liveness/readiness probe tuning (both hit GET /healthz on port 8000).
+probes:
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# -- Pod-level security context.
+podSecurityContext: {}
+  # fsGroup: 1000
+
+# -- Container-level security context.
+securityContext: {}
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# -- Extra environment variables (list of name/value or name/valueFrom maps).
+extraEnv: []
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
