@@ -6,7 +6,7 @@
   </p>
   <h1>Thumper</h1>
   <p align="center">
-  Plant fake-but-realistic credentials where the <a href="https://www.cisa.gov/news-events/alerts">Shai-Hulud</a>
+  Plant fake-but-realistic credentials where the <a href="https://www.securityweek.com/?s=shai+hulud">Shai-Hulud</a>
   npm supply-chain worm scans - and get alerted the instant one is read.
   <br />
   The tokens authenticate to nothing. A <b><em>read</em></b> is the signal.
