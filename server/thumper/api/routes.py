@@ -589,6 +589,15 @@ async def trigger(request: Request, background: BackgroundTasks,
     if deployment is None or not verify(deployment.hmac_secret, body, signature):
         raise HTTPException(401, "invalid signature")
 
+    # Freshness check: the timestamp is inside the signed body, so it can't be
+    # tampered. Reject anything outside the accept window so a captured callback
+    # can't be replayed. Asymmetric on purpose - generous backward tolerance for
+    # slow/queued delivery, tight forward tolerance for clock skew only.
+    ts = _parse_ts(data.get("timestamp"))
+    now = datetime.now(timezone.utc)
+    if ts is None or ts > now + timedelta(seconds=60) or now - ts > timedelta(seconds=300):
+        raise HTTPException(401, "stale or replayed callback")
+
     tripwire = store.get_tripwire(db, deployment.tripwire_id)
     endpoint = store.get_endpoint(db, deployment.endpoint_id)
     pid = data.get("pid")
@@ -603,7 +612,7 @@ async def trigger(request: Request, background: BackgroundTasks,
         pid=int(pid) if pid and str(pid).isdigit() else None,
         os_user=data.get("os_user"),
         event_type=data.get("event_type"),
-        timestamp=data.get("timestamp") or iso_now(),
+        timestamp=data.get("timestamp"),
         triggered_by=data.get("triggered_by"),
     )
     # Only a pending deployment becomes planted. A failed one stays failed.

@@ -1,4 +1,6 @@
 """The /api/trigger route must schedule deliver_alert as a background task."""
+from datetime import datetime, timedelta, timezone
+
 from thumper import store
 from thumper.api import routes
 from thumper.db import Deployment
@@ -12,6 +14,16 @@ def _insert_deployment(db, *, did, secret, path, state="planted"):
     db.commit()
 
 
+def _ts(offset_seconds=0):
+    """An ISO-Z timestamp `offset_seconds` away from now (negative = past)."""
+    t = datetime.now(timezone.utc) + timedelta(seconds=offset_seconds)
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _signed(secret, body):
+    return {"X-Thumper-Signature": sign(secret, body)}
+
+
 def test_trigger_schedules_deliver_alert_with_signed_event(client_db, monkeypatch):
     tc, db = client_db
     secret = "s3cr3t"
@@ -20,9 +32,9 @@ def test_trigger_schedules_deliver_alert_with_signed_event(client_db, monkeypatc
     captured = {}
     monkeypatch.setattr(routes, "deliver_alert", lambda event: captured.update(event))
 
-    body = b"deployment_id=dep_1\nprocess=cat\nos_user=alice\nevent_type=openat\n"
-    resp = tc.post("/api/trigger", content=body,
-                   headers={"X-Thumper-Signature": sign(secret, body)})
+    body = (f"deployment_id=dep_1\nprocess=cat\nos_user=alice\nevent_type=openat\n"
+            f"timestamp={_ts()}").encode()
+    resp = tc.post("/api/trigger", content=body, headers=_signed(secret, body))
 
     assert resp.status_code == 200
     alert_id = resp.json()["alert_id"]
@@ -39,9 +51,8 @@ def test_trigger_bad_signature_schedules_nothing(client_db, monkeypatch):
     calls = []
     monkeypatch.setattr(routes, "deliver_alert", lambda event: calls.append(event))
 
-    body = b"deployment_id=dep_1\nprocess=cat\n"
-    resp = tc.post("/api/trigger", content=body,
-                   headers={"X-Thumper-Signature": sign("wrong-secret", body)})
+    body = f"deployment_id=dep_1\nprocess=cat\ntimestamp={_ts()}".encode()
+    resp = tc.post("/api/trigger", content=body, headers=_signed("wrong-secret", body))
 
     assert resp.status_code == 401
     assert calls == []
@@ -53,9 +64,8 @@ def test_trigger_does_not_revive_failed_deployment(client_db, monkeypatch):
     _insert_deployment(db, did="dep_1", secret=secret, path="/x", state="failed")
     monkeypatch.setattr(routes, "deliver_alert", lambda event: None)
 
-    body = b"deployment_id=dep_1\nprocess=cat\n"
-    resp = tc.post("/api/trigger", content=body,
-                   headers={"X-Thumper-Signature": sign(secret, body)})
+    body = f"deployment_id=dep_1\nprocess=cat\ntimestamp={_ts()}".encode()
+    resp = tc.post("/api/trigger", content=body, headers=_signed(secret, body))
 
     assert resp.status_code == 200
     db.expire_all()
@@ -69,10 +79,56 @@ def test_trigger_promotes_pending_to_planted(client_db, monkeypatch):
     _insert_deployment(db, did="dep_1", secret=secret, path="/x", state="pending")
     monkeypatch.setattr(routes, "deliver_alert", lambda event: None)
 
-    body = b"deployment_id=dep_1\nprocess=cat\n"
-    resp = tc.post("/api/trigger", content=body,
-                   headers={"X-Thumper-Signature": sign(secret, body)})
+    body = f"deployment_id=dep_1\nprocess=cat\ntimestamp={_ts()}".encode()
+    resp = tc.post("/api/trigger", content=body, headers=_signed(secret, body))
 
     assert resp.status_code == 200
     db.expire_all()
     assert db.query(Deployment).filter(Deployment.id == "dep_1").first().state == "planted"
+
+
+# ── replay protection: freshness window on the signed timestamp ──────────────
+
+def test_trigger_rejects_stale_timestamp(client_db, monkeypatch):
+    tc, db = client_db
+    secret = "s3cr3t"
+    _insert_deployment(db, did="dep_1", secret=secret, path="/x")
+
+    calls = []
+    monkeypatch.setattr(routes, "deliver_alert", lambda event: calls.append(event))
+
+    # A captured callback replayed well after the accept window.
+    body = f"deployment_id=dep_1\nprocess=cat\ntimestamp={_ts(-3600)}".encode()
+    resp = tc.post("/api/trigger", content=body, headers=_signed(secret, body))
+
+    assert resp.status_code == 401
+    assert calls == []
+    assert store.list_alerts(db) == []
+
+
+def test_trigger_rejects_future_timestamp(client_db, monkeypatch):
+    tc, db = client_db
+    secret = "s3cr3t"
+    _insert_deployment(db, did="dep_1", secret=secret, path="/x")
+    monkeypatch.setattr(routes, "deliver_alert", lambda event: None)
+
+    # Beyond the forward clock-skew tolerance.
+    body = f"deployment_id=dep_1\nprocess=cat\ntimestamp={_ts(3600)}".encode()
+    resp = tc.post("/api/trigger", content=body, headers=_signed(secret, body))
+
+    assert resp.status_code == 401
+    assert store.list_alerts(db) == []
+
+
+def test_trigger_rejects_missing_timestamp(client_db, monkeypatch):
+    tc, db = client_db
+    secret = "s3cr3t"
+    _insert_deployment(db, did="dep_1", secret=secret, path="/x")
+    monkeypatch.setattr(routes, "deliver_alert", lambda event: None)
+
+    # No timestamp at all must not bypass the freshness check.
+    body = b"deployment_id=dep_1\nprocess=cat\n"
+    resp = tc.post("/api/trigger", content=body, headers=_signed(secret, body))
+
+    assert resp.status_code == 401
+    assert store.list_alerts(db) == []
