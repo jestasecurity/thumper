@@ -28,7 +28,7 @@ Thumper is your self-hosted honeytoken platform for trapping attackers inside yo
 
 <p>
 <h2>🚀 Getting Started</h1>
-The whole stack comes as **one Docker image**:
+The whole stack comes as <b>one Docker image</b>:
 
 ```bash
 docker compose up --build        # → http://localhost:8000
