@@ -46,6 +46,7 @@ export default function Integrations() {
   const deploy = manifests.filter((m) => m.kind === "deploy");
   const alert = manifests.filter((m) => m.kind === "alert");
   const stateOf = (name: string) => integrations.find((i) => i.plugin === name);
+  const COMING_SOON = new Set(["mdm", "ssh", "splunk"]);
 
   function StatusBadge({ st }: { st?: Integration }) {
     if (!st?.configured) {
@@ -86,12 +87,13 @@ export default function Integrations() {
         </div>
         {plugins.map((m) => {
           const st = stateOf(m.name);
+          const soon = COMING_SOON.has(m.name);
           return (
-            <div className="integration-row" key={m.name}>
+            <div className={`integration-row ${soon ? "disabled" : ""}`} key={m.name} title={soon ? "Coming soon" : ""}>
               <div>
                 <div className="row" style={{ gap: 8 }}>
                   <strong>{m.display_name}</strong>
-                  <StatusBadge st={st} />
+                  {soon ? <span className="soon">soon</span> : <StatusBadge st={st} />}
                 </div>
                 <div className="muted" style={{ marginTop: 4 }}>
                   {m.description}

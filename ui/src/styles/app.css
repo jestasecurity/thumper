@@ -374,6 +374,7 @@ input[type="checkbox"]:focus-visible {
 .step-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--accent); font-weight: 700; margin-bottom: 10px; }
 .integration-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .integration-row:last-child { border-bottom: none; }
+.integration-row.disabled { opacity: 0.5; pointer-events: none; }
 
 /* ── Settings grid ──────────────────────────────────────────── */
 .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; padding: 8px 0; }
