@@ -13,7 +13,7 @@
   </p>
   <p>
   <a href="docs/architecture.md"><strong>Get started »</strong></a>
-  <br />
+  |
   <a href="https://jesta.ai/thumper">Wesbite</a>
 </p>
 <p align="center">
