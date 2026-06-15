@@ -12,9 +12,9 @@
   The tokens authenticate to nothing. A <b><em>read</em></b> is the signal.
   </p>
   <p>
-  <a href="docs/architecture.md"><strong>Get started »</strong></a>
-  |
   <a href="https://jesta.ai/thumper">Wesbite</a>
+  |
+  <a href="docs/architecture.md"><strong>Get started »</strong></a>
 </p>
 <p align="center">
    <img src="https://img.shields.io/badge/release-v0.1.0-yellow.svg" alt="PRs welcome" />
