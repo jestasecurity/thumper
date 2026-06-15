@@ -13,6 +13,8 @@
   </p>
   <p>
   <a href="docs/architecture.md"><strong>Get started »</strong></a>
+  <br />
+  <a href="https://jesta.ai/thumper">Wesbite</a>
 </p>
 <p align="center">
    <img src="https://img.shields.io/badge/release-v0.1.0-yellow.svg" alt="PRs welcome" />
