@@ -66,19 +66,23 @@ export function EndpointBadge({ status }: { status: EndpointStatus }) {
 
 /** Monospace block with a copy button - used for the install command. */
 export function CopyField({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
+  const [label, setLabel] = useState("Copy");
   return (
     <div className="copyfield">
       <code>{value}</code>
       <button
         className="btn"
         onClick={() => {
-          navigator.clipboard?.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1200);
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(value);
+            setLabel("✓ Copied");
+          } else {
+            setLabel("Copy failed, try manually");
+          }
+          setTimeout(() => setLabel("Copy"), 1200);
         }}
       >
-        {copied ? "✓ Copied" : "Copy"}
+        {label}
       </button>
     </div>
   );
