@@ -24,3 +24,4 @@ ui/dist/
 
 # AI working artifacts
 docs/superpowers/
+.superpowers/

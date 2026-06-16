@@ -1,15 +1,22 @@
 <div align="center">
-  <h1>Thumper</h1>
+  <p align="center">
+    <a href="https://jesta.ai">
+      <img width="150" src="ui/public/thumper_gif.gif" alt="Thumper" />
+    </a>
+  </p>
+  <h1 align="center">Thumper</h1>
   <p align="center">
   Plant fake-but-realistic credentials where the <a href="https://www.securityweek.com/?s=shai+hulud">Shai-Hulud</a>
   npm supply-chain worm scans - and get alerted the instant one is read.
   <br />
   The tokens authenticate to nothing. A <b><em>read</em></b> is the signal.
   </p>
-  <p>
-  <a href="https://jesta.ai/thumper">Wesbite</a>
-  |
-  <a href="docs/architecture.md"><strong>Get started »</strong></a>
+  <p align="center">
+  <a href="https://jesta.ai/thumper">Website</a>
+  &nbsp;·&nbsp;
+  <a href="https://docs.jesta.ai"><strong>Docs</strong></a>
+  &nbsp;·&nbsp;
+  <a href="docs/architecture.md">Get started »</a>
 </p>
 <p align="center">
    <img src="https://img.shields.io/badge/release-v0.1.0-yellow.svg" alt="PRs welcome" />
@@ -21,6 +28,30 @@
 Thumper is your self-hosted honeytoken platform for trapping attackers inside your environment. You create tripwires, distribute them across your fleet, and each machine plants unique bait.
   When an attacker-controlled process touches the bait, Thumper <b>immediately</b> triggers an alert. <br/>
   It's built and maintained by Jesta under the Apache 2.0 license.
+</p>
+
+<h2>See it in action</h2>
+
+<p align="center">
+  <img src="assets/screens/dashboard.png" alt="Thumper dashboard - fleet overview and live alert feed" width="840" />
+</p>
+
+<p align="center">
+  <img src="assets/screens/create.png" alt="Create a tripwire" width="276" />
+  &nbsp;
+  <img src="assets/screens/endpoints.png" alt="Enrolled endpoints" width="276" />
+  &nbsp;
+  <img src="assets/screens/integrations.png" alt="Alert &amp; deploy integrations" width="276" />
+</p>
+
+<h2>How it works</h2>
+
+<p>
+A read is the whole signal - the planted tokens authenticate to nothing, so any access is suspicious by definition. From plant to alert:
+</p>
+
+<p align="center">
+  <img src="assets/trigger-flow.svg" alt="Trigger flow: plant, watch, read, signed callback, alert" width="940" />
 </p>
 
 <p>
@@ -66,6 +97,10 @@ Defaults to SQLite on a PVC (single replica). Set `externalDatabase.url` for Pos
 <h2>Architecture</h2>
 
 Thumper has three components - a **server**, a **dashboard**, and an **endpoint agent** - shipped as a single Docker image. You create tripwires, deploy them to endpoints, and each machine plants unique bait. When a credential is read, the agent sends a signed callback and the server fans out to your configured alert plugins.
+
+<p align="center">
+  <img src="assets/architecture.svg" alt="Thumper architecture: operator, control plane, endpoint fleet" width="940" />
+</p>
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture reference.
 

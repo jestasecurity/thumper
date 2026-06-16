@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 300" width="1180" height="300" font-family="Inter, -apple-system, system-ui, sans-serif">
+  <defs>
+    <radialGradient id="bgGlow2" cx="50%" cy="-10%" r="80%">
+      <stop offset="0" stop-color="#e8a13a" stop-opacity="0.08"/>
+      <stop offset="55%" stop-color="#e8a13a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="g2" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3"/></filter>
+    <marker id="fa" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e8a13a"/></marker>
+    <style>
+      .card{fill:#0b0e14;stroke:#2a3346}
+      .card-red{fill:#0d0809;stroke:#5a2330}
+      .num{fill:#0d1016;stroke:#3a2e16}
+      .numt{fill:#e8a13a;font:700 14px ui-monospace,Menlo,monospace}
+      .numt-r{fill:#ff5d5d;font:700 14px ui-monospace,Menlo,monospace}
+      .t{fill:#e6e9f0;font:700 14px Inter,system-ui,sans-serif}
+      .s{fill:#8b94a8;font:11.5px Inter,system-ui,sans-serif}
+      .flow{stroke:#e8a13a;stroke-width:2.4;fill:none}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="300" rx="16" fill="#07090e"/>
+  <rect x="0" y="0" width="1180" height="300" rx="16" fill="url(#bgGlow2)"/>
+  <rect x="1" y="1" width="1178" height="298" rx="16" fill="none" stroke="#1a2030"/>
+
+  <!-- connecting arrows first -->
+  <path class="flow" d="M236 150 H272" marker-end="url(#fa)"/>
+  <path class="flow" d="M472 150 H508" marker-end="url(#fa)"/>
+  <path class="flow" d="M708 150 H744" marker-end="url(#fa)"/>
+  <path class="flow" d="M944 150 H980" marker-end="url(#fa)"/>
+
+  <!-- step 1 -->
+  <rect class="card" x="40" y="92" width="196" height="116" rx="12"/>
+  <circle class="num" cx="66" cy="118" r="13"/><text class="numt" x="61" y="123">1</text>
+  <text class="t" x="88" y="123">Plant</text>
+  <text class="s" x="60" y="152">Server renders bait,</text>
+  <text class="s" x="60" y="170">signs the deploy spec;</text>
+  <text class="s" x="60" y="188">agent plants the token.</text>
+
+  <!-- step 2 -->
+  <rect class="card" x="276" y="92" width="196" height="116" rx="12"/>
+  <circle class="num" cx="302" cy="118" r="13"/><text class="numt" x="297" y="123">2</text>
+  <text class="t" x="324" y="123">Watch</text>
+  <text class="s" x="296" y="152">Agent tails file reads</text>
+  <text class="s" x="296" y="170">(fs_usage) for the</text>
+  <text class="s" x="296" y="188">planted paths.</text>
+
+  <!-- step 3 (red pivot) -->
+  <rect class="card-red" x="512" y="92" width="196" height="116" rx="12"/>
+  <rect x="512" y="92" width="196" height="116" rx="12" fill="none" stroke="#ff5d5d" stroke-opacity=".4" filter="url(#g2)"/>
+  <circle class="num" cx="538" cy="118" r="13" stroke="#5a2330"/><text class="numt-r" x="533" y="123">3</text>
+  <text class="t" x="560" y="123" fill="#ffb4b4">Read</text>
+  <text class="s" x="532" y="152" fill="#ff8a8a">An attacker-controlled</text>
+  <text class="s" x="532" y="170" fill="#ff8a8a">process opens the bait.</text>
+  <text class="s" x="532" y="188">The read IS the signal.</text>
+
+  <!-- step 4 -->
+  <rect class="card" x="748" y="92" width="196" height="116" rx="12"/>
+  <circle class="num" cx="774" cy="118" r="13"/><text class="numt" x="769" y="123">4</text>
+  <text class="t" x="796" y="123">Callback</text>
+  <text class="s" x="768" y="152">Agent POSTs a signed,</text>
+  <text class="s" x="768" y="170">timestamped HMAC to</text>
+  <text class="s" x="768" y="188">/api/trigger.</text>
+
+  <!-- step 5 -->
+  <rect class="card" x="984" y="92" width="196" height="116" rx="12"/>
+  <circle class="num" cx="1010" cy="118" r="13"/><text class="numt" x="1005" y="123">5</text>
+  <text class="t" x="1032" y="123">Alert</text>
+  <text class="s" x="1004" y="152">Server verifies HMAC</text>
+  <text class="s" x="1004" y="170">+ freshness, then fans</text>
+  <text class="s" x="1004" y="188">out: Slack·Webhook·Jamf.</text>
+</svg>

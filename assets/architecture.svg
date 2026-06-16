@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" width="1180" height="560" font-family="Inter, -apple-system, system-ui, sans-serif">
+  <defs>
+    <radialGradient id="bgGlow" cx="70%" cy="-10%" r="80%">
+      <stop offset="0" stop-color="#e8a13a" stop-opacity="0.10"/>
+      <stop offset="55%" stop-color="#e8a13a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.4"/></filter>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e8a13a"/></marker>
+    <marker id="arrR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff5d5d"/></marker>
+    <style>
+      .zone{fill:none;stroke:#232a3a;stroke-dasharray:4 6}
+      .zlabel{fill:#5a6377;font:600 12px ui-monospace,Menlo,monospace;letter-spacing:2px}
+      .node{fill:#0b0e14;stroke:#2a3346}
+      .node-amber{fill:#0d1016;stroke:#3a2e16}
+      .ntitle{fill:#e6e9f0;font:700 15px Inter,system-ui,sans-serif}
+      .nsub{fill:#8b94a8;font:12px Inter,system-ui,sans-serif}
+      .amber{fill:#e8a13a}
+      .link{stroke:#e8a13a;stroke-width:2.2;fill:none}
+      .danger{stroke:#ff5d5d;stroke-width:2.2;fill:none}
+      .lbl-bg{fill:#07090e}
+      .llabel{fill:#9aa3b6;font:600 11px ui-monospace,Menlo,monospace}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="560" rx="16" fill="#07090e"/>
+  <rect x="0" y="0" width="1180" height="560" rx="16" fill="url(#bgGlow)"/>
+  <rect x="1" y="1" width="1178" height="558" rx="16" fill="none" stroke="#1a2030"/>
+
+  <!-- zones -->
+  <rect class="zone" x="40"  y="70" width="250" height="330" rx="16"/>
+  <text class="zlabel" x="52" y="56">OPERATOR</text>
+  <rect class="zone" x="440" y="70" width="320" height="430" rx="16"/>
+  <text class="zlabel" x="452" y="56">CONTROL PLANE</text>
+  <rect class="zone" x="860" y="70" width="280" height="430" rx="16"/>
+  <text class="zlabel" x="872" y="56">ENDPOINT FLEET</text>
+
+  <!-- connectors first, so node boxes sit on top -->
+  <path class="link" d="M258 224 H472" marker-end="url(#arr)"/>
+  <path class="link" d="M728 200 H892" marker-end="url(#arr)"/>
+  <path class="link" d="M600 322 V378" marker-end="url(#arr)"/>
+  <path class="danger" d="M952 393 V430 H800 V312 H732" marker-end="url(#arrR)"/>
+
+  <!-- connector labels -->
+  <g><rect class="lbl-bg" x="300" y="200" width="54" height="17"/><text class="llabel" x="307" y="213">HTTPS</text></g>
+  <g><rect class="lbl-bg" x="744" y="176" width="150" height="17"/><text class="llabel" x="751" y="189">enroll · deploy spec</text></g>
+  <g><rect class="lbl-bg" x="610" y="342" width="92" height="17"/><text class="llabel" x="617" y="355">alert fan-out</text></g>
+  <g><rect class="lbl-bg" x="660" y="296" width="104" height="17"/><text class="llabel" x="667" y="309" fill="#ff8a8a">signed callback</text></g>
+
+  <!-- UI node -->
+  <rect class="node" x="72" y="170" width="186" height="150" rx="11"/>
+  <circle class="amber" cx="104" cy="208" r="5.5" filter="url(#glow)"/>
+  <text class="ntitle" x="122" y="214">Web UI</text>
+  <text class="nsub" x="92" y="248">React dashboard</text>
+  <text class="nsub" x="92" y="274">tripwires · alerts</text>
+  <text class="nsub" x="92" y="300">endpoints · config</text>
+
+  <!-- Server node -->
+  <rect class="node node-amber" x="472" y="150" width="256" height="172" rx="12"/>
+  <rect x="472" y="150" width="256" height="172" rx="12" fill="none" stroke="#e8a13a" stroke-opacity=".35" filter="url(#glow)"/>
+  <text class="ntitle" x="500" y="188">Thumper Server</text>
+  <text class="nsub" x="500" y="216">FastAPI · SQLite / Postgres</text>
+  <text class="nsub" x="500" y="242">renders bait · signs deploys</text>
+  <text class="nsub" x="500" y="268">verifies HMAC · fans out alerts</text>
+  <rect x="500" y="284" width="118" height="24" rx="6" fill="#11151f" stroke="#232a3a"/>
+  <text class="nsub" x="514" y="300" font-size="11">POST /api/trigger</text>
+
+  <!-- integrations -->
+  <rect class="node" x="472" y="378" width="256" height="98" rx="12"/>
+  <text class="ntitle" x="500" y="414" font-size="14">Integrations</text>
+  <text class="nsub" x="500" y="442">Slack · Webhook · Jamf</text>
+  <circle cx="700" cy="404" r="4.5" class="amber"/>
+
+  <!-- endpoint agent -->
+  <rect class="node" x="892" y="138" width="216" height="104" rx="12"/>
+  <text class="ntitle" x="918" y="172" font-size="14">Endpoint agent</text>
+  <text class="nsub" x="918" y="198">pure-Bash · plants bait</text>
+  <text class="nsub" x="918" y="222">watches reads (fs_usage)</text>
+
+  <!-- planted bait -->
+  <rect class="node" x="892" y="280" width="216" height="104" rx="12"/>
+  <text class="ntitle" x="918" y="314" font-size="14">Planted bait</text>
+  <text class="nsub" x="918" y="340">~/.aws/credentials</text>
+  <text class="nsub" x="918" y="364">/etc/ssh/id_ed25519</text>
+
+  <!-- read-marker + label -->
+  <circle cx="952" cy="384" r="9" fill="#2a1414" stroke="#ff5d5d"/>
+  <circle cx="952" cy="384" r="4" fill="#ff5d5d"/>
+  <g><rect class="lbl-bg" x="966" y="393" width="168" height="17"/><text class="nsub" x="973" y="406" fill="#ff5d5d">attacker reads a token</text></g>
+</svg>
