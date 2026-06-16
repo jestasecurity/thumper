@@ -1,10 +1,10 @@
 <div align="center">
-  <p>
+  <p align="center">
     <a href="https://jesta.ai">
       <img width="150" src="ui/public/thumper_gif.gif" alt="Thumper" />
     </a>
   </p>
-  <h1>Thumper</h1>
+  <h1 align="center">Thumper</h1>
   <p align="center">
   Plant fake-but-realistic credentials where the <a href="https://www.securityweek.com/?s=shai+hulud">Shai-Hulud</a>
   npm supply-chain worm scans - and get alerted the instant one is read.
