@@ -13,7 +13,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/jesta/thumper
+  IMAGE: ghcr.io/jestasecurity/thumper
 
 jobs:
   release:
