@@ -286,6 +286,16 @@ plant() {  # plant <i>
         return 1
     fi
 
+    # Never write THROUGH a symlink. The guard above only covers links we didn't
+    # plant; if a path we DID plant was later swapped for a symlink, `curl -o`
+    # would follow it and clobber the link target. We always plant a regular file,
+    # so a symlink here is an attack - refuse unconditionally, even under --force.
+    if [ -L "$path" ]; then
+        err "refusing to write through symlink at $path - skipping $id"
+        report_plant "$id" failed
+        return 1
+    fi
+
     if ! curl -fsS "$url" -H "Authorization: Bearer $AGENT_TOKEN" -o "$path"; then
         rm -f "$path"   # remove the partial/empty file curl may have left
         err "failed to fetch bait for $id"
