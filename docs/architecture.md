@@ -17,6 +17,15 @@ Endpoint  ◀── self-enroll (shared enroll token) ────────�
                     └─ on read → HMAC-signed, enriched callback → Alert → alert plugins
 ```
 
+## Trigger flow
+
+A read is the whole signal - the planted tokens authenticate to nothing, so any
+access is suspicious by definition. From plant to alert:
+
+<p align="center">
+  <img src="../assets/trigger-flow.svg" alt="Trigger flow: plant, watch, read, signed callback, alert" width="940" />
+</p>
+
 ## Data model
 
 | Entity | Purpose | Key fields |

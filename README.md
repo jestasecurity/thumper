@@ -37,21 +37,7 @@ Thumper is your self-hosted honeytoken platform for trapping attackers inside yo
 </p>
 
 <p align="center">
-  <img src="assets/screens/create.png" alt="Create a tripwire" width="276" />
-  &nbsp;
-  <img src="assets/screens/endpoints.png" alt="Enrolled endpoints" width="276" />
-  &nbsp;
-  <img src="assets/screens/integrations.png" alt="Alert &amp; deploy integrations" width="276" />
-</p>
-
-<h2>How it works</h2>
-
-<p>
-A read is the whole signal - the planted tokens authenticate to nothing, so any access is suspicious by definition. From plant to alert:
-</p>
-
-<p align="center">
-  <img src="assets/trigger-flow.svg" alt="Trigger flow: plant, watch, read, signed callback, alert" width="940" />
+  <img src="assets/screens/endpoints.png" alt="Enrolled endpoints" width="840" />
 </p>
 
 <p>
