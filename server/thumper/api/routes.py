@@ -110,7 +110,8 @@ def _endpoint_out(db, endpoint, *, deployment_count=None, triggered_count=None) 
     return EndpointOut(
         id=endpoint_id, hostname=endpoint.hostname, platform=endpoint.platform,
         enrolled_at=endpoint.enrolled_at, last_seen=endpoint.last_seen,
-        status=_endpoint_status(endpoint.last_seen),
+        status="decommissioning" if endpoint.decommission_requested_at
+        else _endpoint_status(endpoint.last_seen),
         deployment_count=deployment_count,
         triggered_count=triggered_count,
     )
@@ -290,6 +291,24 @@ def unassign_tripwire(eid: str, tid: str, db: Session = Depends(get_db)):
     if deployment is None:
         raise HTTPException(404, "tripwire not assigned to this endpoint")
     store.delete_deployment(db, deployment.id)
+    return {"status": "ok"}
+
+
+@router.post("/endpoints/{eid}/decommission", response_model=EndpointOut)
+def decommission_endpoint(eid: str, db: Session = Depends(get_db)):
+    """Flag the endpoint to self-destruct. The agent unplants all bait, removes
+    itself, and confirms (then the row is deleted) on its next heartbeat."""
+    if not store.request_decommission(db, eid):
+        raise HTTPException(404, "endpoint not found")
+    return _endpoint_out(db, store.get_endpoint(db, eid))
+
+
+@router.delete("/endpoints/{eid}")
+def force_remove_endpoint(eid: str, db: Session = Depends(get_db)):
+    """Force-remove an endpoint without waiting for the agent to confirm. For a
+    dead/offline machine; any bait there stays planted until manually cleaned."""
+    if not store.delete_endpoint(db, eid):
+        raise HTTPException(404, "endpoint not found")
     return {"status": "ok"}
 
 
@@ -514,6 +533,21 @@ def agent_heartbeat(authorization: str = Header(default=""),
                     db: Session = Depends(get_db)):
     endpoint = _authed_endpoint(db, authorization)
     store.touch_endpoint(db, endpoint.id)
+    # The heartbeat doubles as the kill channel: a flagged endpoint is told to
+    # self-destruct here (an explicit signal, NOT a 401 - so it can't be confused
+    # with a revoked token, which would otherwise trigger a re-enroll).
+    if endpoint.decommission_requested_at:
+        return PlainTextResponse("decommission\n")
+    return PlainTextResponse("ok\n")
+
+
+@router.post("/agent/decommissioned", response_class=PlainTextResponse)
+def agent_decommissioned(authorization: str = Header(default=""),
+                         db: Session = Depends(get_db)):
+    """The agent confirms it has self-destructed; drop its record (and its
+    deployments). Alert history is preserved."""
+    endpoint = _authed_endpoint(db, authorization)
+    store.delete_endpoint(db, endpoint.id)
     return PlainTextResponse("ok\n")
 
 

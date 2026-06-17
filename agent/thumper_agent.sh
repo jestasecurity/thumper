@@ -366,10 +366,46 @@ heartbeat_loop() {
     while true; do
         sleep "$HEARTBEAT"
         tok=$(state_get "$STATE_FILE" agent_token)
-        curl -fsS -X POST "$SERVER/api/agent/heartbeat" \
-            -H "Authorization: Bearer $tok" >/dev/null 2>&1 \
-            || log "heartbeat failed"
+        # Capture the body: the server answers "decommission" (instead of "ok")
+        # to tell this agent to self-destruct. Signal the main process to do the
+        # teardown - it owns the watcher, lock, and traps.
+        resp=$(curl -fsS -X POST "$SERVER/api/agent/heartbeat" \
+            -H "Authorization: Bearer $tok" 2>/dev/null) || { log "heartbeat failed"; continue; }
+        if [ "$resp" = "decommission" ]; then
+            log "decommission signal received from server"
+            kill -USR1 "$MAIN_PID" 2>/dev/null
+            return
+        fi
     done
+}
+
+# Remove every bait this agent planted (from its manifest). Used by self-destruct.
+unplant_all() {
+    [ -f "${MANIFEST_FILE:-}" ] || return 0
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        rm -f "$p" && log "removed bait $p"
+    done < "$MANIFEST_FILE"
+}
+
+# Full self-destruct: stop watching, unplant all bait, confirm to the server so it
+# drops our record, release the lock, and delete our own install dir + state. Runs
+# in the main process via a USR1 trap so it can reach the watcher PID and lock.
+self_destruct() {
+    trap - EXIT INT TERM USR1     # we own teardown from here
+    log "self-destructing: unplanting all bait and removing agent"
+    stop_watcher 2>/dev/null
+    [ -n "${HEARTBEAT_PID:-}" ] && kill "$HEARTBEAT_PID" 2>/dev/null
+    unplant_all
+    tok=$(state_get "$STATE_FILE" agent_token)
+    curl -fsS -X POST "$SERVER/api/agent/decommissioned" \
+        -H "Authorization: Bearer $tok" >/dev/null 2>&1 || log "decommission confirm failed"
+    release_singleton
+    dir=$(dirname "$STATE_FILE")
+    rm -f "$STATE_FILE" "$MANIFEST_FILE"
+    rm -rf "$dir"
+    log "agent removed"
+    exit 0
 }
 
 dep_index_for_line() {  # echo the deployment index whose path appears in the line
@@ -577,6 +613,7 @@ verify_planted() {
 run() {
     STATE_FILE=${STATE_FILE:-$DEFAULT_STATE}
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
+    MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
     acquire_singleton
@@ -619,6 +656,8 @@ run() {
     cleanup_heartbeat() { [ -n "$HEARTBEAT_PID" ] && kill "$HEARTBEAT_PID" 2>/dev/null; }
     trap 'stop_watcher; cleanup_heartbeat; release_singleton; exit 0' INT TERM
     trap 'stop_watcher; cleanup_heartbeat; release_singleton' EXIT
+    # Remote kill: the heartbeat loop raises USR1 when the server flags us.
+    trap 'self_destruct' USR1
 
     start_watcher
 

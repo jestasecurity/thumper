@@ -76,6 +76,12 @@ export const httpApi = {
   unassignTripwire: (eid: string, tripwireId: string) =>
     req<{ status: string }>(`/endpoints/${eid}/tripwires/${tripwireId}`,
       { method: "DELETE" }),
+  // Flag the endpoint to self-destruct (agent unplants + removes itself on its
+  // next heartbeat); or force-remove a dead one outright.
+  decommissionEndpoint: (eid: string) =>
+    req<Endpoint>(`/endpoints/${eid}/decommission`, { method: "POST" }),
+  removeEndpoint: (eid: string) =>
+    req<{ status: string }>(`/endpoints/${eid}`, { method: "DELETE" }),
 
   // Alerts
   listAlerts: () => req<Alert[]>("/alerts"),

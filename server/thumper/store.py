@@ -103,6 +103,32 @@ def touch_endpoint(db: Session, eid: str) -> None:
     db.commit()
 
 
+def request_decommission(db: Session, eid: str) -> bool:
+    """Flag an endpoint for self-destruct. Idempotent; False if the id is unknown.
+    The agent picks up the kill signal on its next heartbeat."""
+    ep = db.query(Endpoint).filter(Endpoint.id == eid).first()
+    if ep is None:
+        return False
+    if ep.decommission_requested_at is None:
+        ep.decommission_requested_at = iso_now()
+        db.commit()
+    return True
+
+
+def delete_endpoint(db: Session, eid: str) -> bool:
+    """Remove an endpoint and its deployments. Alert history is kept (it carries
+    a denormalized hostname, so it stands alone). Returns whether a row existed.
+    Deployments are deleted explicitly (not relying on the FK cascade, which
+    SQLite only honors with foreign_keys=ON), mirroring delete_tripwire."""
+    ep = db.query(Endpoint).filter(Endpoint.id == eid).first()
+    if ep is None:
+        return False
+    db.query(Deployment).filter(Deployment.endpoint_id == eid).delete()
+    db.delete(ep)
+    db.commit()
+    return True
+
+
 # ── deployments (instances) ──────────────────────────────────────────────────
 def materialize_deployment(db: Session, *, tripwire_id: str, endpoint_id: str,
                            path: str, content: str) -> Deployment:

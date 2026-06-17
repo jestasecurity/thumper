@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import { api } from "../api";
 import type { EndpointDetail as ED, Tripwire } from "../api";
@@ -23,7 +23,9 @@ export default function EndpointDetail() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<{ tripwireId: string; name: string } | null>(null);
+  const [confirm, setConfirm] = useState<"decommission" | "force" | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const nav = useNavigate();
 
   const reload = useCallback(() => {
     api.getEndpoint(id).then(setEp);
@@ -62,9 +64,27 @@ export default function EndpointDetail() {
     }
   }
 
+  const decommissioning = ep.status === "decommissioning";
+
   return (
     <>
-      <Topbar title={ep.hostname} />
+      <Topbar
+        title={ep.hostname}
+        action={
+          decommissioning ? (
+            <span className="row" style={{ gap: 10, alignItems: "center" }}>
+              <span className="muted">decommissioning…</span>
+              <button className="btn danger" disabled={busy} onClick={() => setConfirm("force")}>
+                Force remove
+              </button>
+            </span>
+          ) : (
+            <button className="btn danger" disabled={busy} onClick={() => setConfirm("decommission")}>
+              Decommission
+            </button>
+          )
+        }
+      />
       <div className="content">
         <div className="card">
           <div className="row" style={{ gap: 10 }}>
@@ -157,6 +177,41 @@ export default function EndpointDetail() {
           )}
         </div>
       </div>
+
+      {confirm === "decommission" && (
+        <Modal onClose={() => setConfirm(null)}>
+          <div className="card-head"><h2>Decommission endpoint</h2></div>
+          <p className="modal-intro">
+            Tell <strong>{ep.hostname}</strong> to self-destruct? On its next check-in the agent
+            unplants all its bait, removes itself, and disappears from the dashboard. This can't be undone.
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn danger" onClick={() => {
+              setConfirm(null);
+              act(() => api.decommissionEndpoint(id));
+            }}>Decommission</button>
+            <button className="btn" onClick={() => setConfirm(null)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+
+      {confirm === "force" && (
+        <Modal onClose={() => setConfirm(null)}>
+          <div className="card-head"><h2>Force remove endpoint</h2></div>
+          <p className="modal-intro">
+            Remove <strong>{ep.hostname}</strong> from the dashboard now, without waiting for the
+            agent to confirm. Use this only for a dead/offline machine - any bait already planted
+            there will stay until cleaned up manually.
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn danger" onClick={() => {
+              setConfirm(null);
+              act(async () => { await api.removeEndpoint(id); nav("/endpoints"); });
+            }}>Force remove</button>
+            <button className="btn" onClick={() => setConfirm(null)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
 
       {removing && (
         <Modal onClose={() => setRemoving(null)}>

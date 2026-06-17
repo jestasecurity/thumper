@@ -41,6 +41,10 @@ class Endpoint(Base):
     agent_token = Column(String(255), nullable=False)
     enrolled_at = Column(String(255), nullable=False)
     last_seen = Column(String(255))
+    # Set when the operator asks this endpoint to self-destruct. While non-NULL
+    # the endpoint shows as "decommissioning"; the agent gets a kill signal on its
+    # next heartbeat and the row is deleted once it confirms (or on force-remove).
+    decommission_requested_at = Column(String(255))
 
 
 class Deployment(Base):

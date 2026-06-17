@@ -10,7 +10,7 @@ export type CredentialSource = "template" | "custom" | "managed";
 /** Per-endpoint instance lifecycle. */
 export type DeploymentState = "pending" | "planted" | "failed";
 
-export type EndpointStatus = "online" | "stale" | "inactive";
+export type EndpointStatus = "online" | "stale" | "inactive" | "decommissioning";
 
 export interface TokenTypeInfo {
   type: TokenType;
