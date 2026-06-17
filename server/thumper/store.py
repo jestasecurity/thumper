@@ -211,10 +211,9 @@ def resolve_deployment_alerts(db: Session, did: str) -> int:
     return n
 
 
-# The "triggered" rollups below count only OPEN (unresolved) alerts, so the red
-# "triggered" badges across the UI clear in lockstep with the dashboard's active
-# count once an operator resolves them. `count_alerts_since` is deliberately not
-# filtered - it's a 24h volume metric, not an active-state indicator.
+# The alert rollups below all count only OPEN (unresolved) alerts, so every
+# "triggered" badge and the 24h count across the UI clear in lockstep with the
+# dashboard's active count once an operator resolves them.
 def count_alerts_for_tripwire(db: Session, tripwire_id: str) -> int:
     return db.query(Alert).filter(
         Alert.tripwire_id == tripwire_id, Alert.resolved_at.is_(None)).count()
@@ -231,7 +230,9 @@ def count_alerts_for_deployment(db: Session, deployment_id: str) -> int:
 
 
 def count_alerts_since(db: Session, cutoff_iso: str) -> int:
-    return db.query(Alert).filter(Alert.timestamp >= cutoff_iso).count()
+    """Open alerts fired since the cutoff. Resolving one drops it from the count."""
+    return db.query(Alert).filter(
+        Alert.timestamp >= cutoff_iso, Alert.resolved_at.is_(None)).count()
 
 
 def count_distinct_alert_deployments(db: Session) -> int:

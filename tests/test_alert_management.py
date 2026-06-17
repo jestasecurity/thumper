@@ -1,4 +1,6 @@
 """Alert lifecycle: manual resolve (Open → Resolved), per-alert + bulk."""
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -152,6 +154,20 @@ def test_batched_counts_are_open_only(client_db):
     store.resolve_alert(db, a.id)
     assert store.alert_counts_by_endpoint(db)["ep_1"] == 1
     assert store.alert_counts_by_tripwire(db)["tw_1"] == 1
+
+
+def test_stats_alerts_24h_excludes_resolved(client_db):
+    tc, db = client_db
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    a = store.create_alert(db, deployment_id="dp_1", tripwire_id="tw_1", endpoint_id="ep_1",
+                           tripwire_name="x", endpoint_hostname="h", token_type="aws",
+                           timestamp=now, triggered_by=None)
+    store.create_alert(db, deployment_id="dp_2", tripwire_id="tw_1", endpoint_id="ep_1",
+                       tripwire_name="x", endpoint_hostname="h", token_type="aws",
+                       timestamp=now, triggered_by=None)
+    assert tc.get("/api/stats").json()["alerts_24h"] == 2
+    store.resolve_alert(db, a.id)
+    assert tc.get("/api/stats").json()["alerts_24h"] == 1
 
 
 def test_endpoints_api_trigger_count_decays(client_db):
