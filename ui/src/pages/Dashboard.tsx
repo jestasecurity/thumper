@@ -73,8 +73,7 @@ export default function Dashboard() {
   }
 
   function resolveAllOpen() {
-    const deployments = [...new Set(openAlerts.map((a) => a.deployment_id))];
-    Promise.all(deployments.map((d) => api.resolveDeploymentAlerts(d))).then(reload);
+    api.resolveAllAlerts().then(reload);
   }
 
   return (
@@ -115,7 +114,7 @@ export default function Dashboard() {
           </div>
           <div className="stat alert">
             <div className="stat-val">{stats?.alerts_24h ?? "-"}</div>
-            <div className="stat-label">Alerts (24h)</div>
+            <div className="stat-label">Open alerts (24h)</div>
           </div>
           <div className="stat alert">
             <div className="stat-val">{stats?.active_triggers ?? "-"}</div>

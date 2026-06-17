@@ -86,6 +86,8 @@ export const httpApi = {
       method: "POST",
       body: JSON.stringify({ deployment_id: deploymentId }),
     }),
+  resolveAllAlerts: () =>
+    req<{ resolved: number }>("/alerts/resolve-all", { method: "POST" }),
 
   // Plugins / integrations
   listManifests: () => req<PluginManifest[]>("/manifests"),

@@ -41,17 +41,40 @@ def test_new_alert_is_open(client_db):
     assert a.resolved_at is None
 
 
-def test_resolve_alert_sets_timestamp(client_db):
+def test_resolve_alert_sets_timestamp_and_returns_row(client_db):
     _, db = client_db
     a = _mk(db, did="dp_1")
-    assert store.resolve_alert(db, a.id) is True
-    db.refresh(a)
-    assert a.resolved_at is not None
+    resolved = store.resolve_alert(db, a.id)
+    assert resolved is not None and resolved.id == a.id
+    assert resolved.resolved_at is not None
 
 
-def test_resolve_unknown_alert_returns_false(client_db):
+def test_resolve_unknown_alert_returns_none(client_db):
     _, db = client_db
-    assert store.resolve_alert(db, "nope") is False
+    assert store.resolve_alert(db, "nope") is None
+
+
+def test_list_alerts_invalid_status_raises(client_db):
+    _, db = client_db
+    with pytest.raises(ValueError):
+        store.list_alerts(db, status="typo")
+
+
+def test_resolve_all_alerts_store(client_db):
+    _, db = client_db
+    _mk(db, did="dp_1"); _mk(db, did="dp_2"); _mk(db, did="dp_3")
+    assert store.resolve_all_alerts(db) == 3
+    assert store.resolve_all_alerts(db) == 0  # nothing left open
+    assert store.list_alerts(db, status="open") == []
+
+
+def test_resolve_all_endpoint(client_db):
+    tc, db = client_db
+    _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    resp = tc.post("/api/alerts/resolve-all")
+    assert resp.status_code == 200
+    assert resp.json() == {"resolved": 2}
+    assert tc.get("/api/stats").json()["active_triggers"] == 0
 
 
 def test_bulk_resolve_for_deployment(client_db):

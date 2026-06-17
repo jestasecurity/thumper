@@ -303,6 +303,12 @@ def list_alerts(status: str | None = Query(default=None, pattern="^(open|resolve
     return [_alert_out(alert) for alert in store.list_alerts(db, status=status)]
 
 
+@router.post("/alerts/resolve-all")
+def resolve_all_alerts(db: Session = Depends(get_db)):
+    """Bulk-resolve every open alert in one round trip."""
+    return {"resolved": store.resolve_all_alerts(db)}
+
+
 @router.post("/alerts/resolve")
 def resolve_deployment_alerts(body: ResolveAlertsIn, db: Session = Depends(get_db)):
     """Bulk-resolve every open alert for a deployment."""
@@ -311,9 +317,10 @@ def resolve_deployment_alerts(body: ResolveAlertsIn, db: Session = Depends(get_d
 
 @router.post("/alerts/{aid}/resolve", response_model=AlertOut)
 def resolve_alert(aid: str, db: Session = Depends(get_db)):
-    if not store.resolve_alert(db, aid):
+    alert = store.resolve_alert(db, aid)
+    if alert is None:
         raise HTTPException(404, "alert not found")
-    return _alert_out(store.get_alert(db, aid))
+    return _alert_out(alert)
 
 
 @router.get("/alerts/{aid}/deliveries", response_model=list[DeliveryOut])

@@ -177,12 +177,15 @@ def create_alert(db: Session, *, deployment_id: str, tripwire_id: str,
 
 def list_alerts(db: Session, status: Optional[str] = None) -> list[Alert]:
     """All alerts, newest first. `status` optionally filters to "open"
-    (unresolved) or "resolved"; anything else returns all."""
+    (unresolved) or "resolved". An unrecognized value is a caller bug, not a
+    silent "return everything" - so it raises."""
     q = db.query(Alert)
     if status == "open":
         q = q.filter(Alert.resolved_at.is_(None))
     elif status == "resolved":
         q = q.filter(Alert.resolved_at.isnot(None))
+    elif status is not None:
+        raise ValueError(f"invalid alert status filter: {status!r}")
     return q.order_by(Alert.timestamp.desc()).all()
 
 
@@ -190,15 +193,16 @@ def get_alert(db: Session, aid: str) -> Optional[Alert]:
     return db.query(Alert).filter(Alert.id == aid).first()
 
 
-def resolve_alert(db: Session, aid: str) -> bool:
-    """Mark one alert resolved. Idempotent; returns False if the id is unknown."""
+def resolve_alert(db: Session, aid: str) -> Optional[Alert]:
+    """Mark one alert resolved and return it. Idempotent; returns None if the id
+    is unknown (so the caller has the row without a second query)."""
     alert = db.query(Alert).filter(Alert.id == aid).first()
     if alert is None:
-        return False
+        return None
     if alert.resolved_at is None:
         alert.resolved_at = iso_now()
         db.commit()
-    return True
+    return alert
 
 
 def resolve_deployment_alerts(db: Session, did: str) -> int:
@@ -207,6 +211,14 @@ def resolve_deployment_alerts(db: Session, did: str) -> int:
     n = db.query(Alert).filter(
         Alert.deployment_id == did, Alert.resolved_at.is_(None),
     ).update({Alert.resolved_at: iso_now()})
+    db.commit()
+    return n
+
+
+def resolve_all_alerts(db: Session) -> int:
+    """Resolve every open alert in one statement. Returns the count resolved."""
+    n = db.query(Alert).filter(Alert.resolved_at.is_(None)) \
+        .update({Alert.resolved_at: iso_now()})
     db.commit()
     return n
 

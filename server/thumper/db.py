@@ -82,6 +82,9 @@ class Alert(Base):
     __table_args__ = (
         Index("ix_alert_deployment", "deployment_id"),
         Index("ix_alert_tripwire", "tripwire_id"),
+        # Every active-count query filters resolved_at IS NULL; index it so those
+        # don't table-scan as alert history grows.
+        Index("ix_alert_resolved_at", "resolved_at"),
     )
 
 

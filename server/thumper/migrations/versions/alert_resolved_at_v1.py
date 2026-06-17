@@ -22,8 +22,11 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     with op.batch_alter_table("alerts") as b:
         b.add_column(sa.Column("resolved_at", sa.String(length=255), nullable=True))
+    # Active-count queries all filter resolved_at IS NULL - index it.
+    op.create_index("ix_alert_resolved_at", "alerts", ["resolved_at"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_alert_resolved_at", table_name="alerts")
     with op.batch_alter_table("alerts") as b:
         b.drop_column("resolved_at")
