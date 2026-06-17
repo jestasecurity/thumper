@@ -401,9 +401,17 @@ self_destruct() {
     curl -fsS -X POST "$SERVER/api/agent/decommissioned" \
         -H "Authorization: Bearer $tok" >/dev/null 2>&1 || log "decommission confirm failed"
     release_singleton
-    dir=$(dirname "$STATE_FILE")
     rm -f "$STATE_FILE" "$MANIFEST_FILE"
-    rm -rf "$dir"
+    # Delete our own install dir - but never a dangerous/shared path. A
+    # misconfigured --state-file (e.g. /state.json) must not turn this into
+    # `rm -rf /` or wipe a home dir; in that case we leave the dir and just exit.
+    dir=$(cd "$(dirname "$STATE_FILE")" 2>/dev/null && pwd) || dir=""
+    case "$dir" in
+        ""|/|/home|/Users|/root|/etc|/var|/usr|/tmp|/opt|"$HOME")
+            err "refusing to rm -rf install dir '$dir' (unsafe); leaving it in place" ;;
+        *)
+            rm -rf "$dir" ;;
+    esac
     log "agent removed"
     exit 0
 }

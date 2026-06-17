@@ -298,9 +298,10 @@ def unassign_tripwire(eid: str, tid: str, db: Session = Depends(get_db)):
 def decommission_endpoint(eid: str, db: Session = Depends(get_db)):
     """Flag the endpoint to self-destruct. The agent unplants all bait, removes
     itself, and confirms (then the row is deleted) on its next heartbeat."""
-    if not store.request_decommission(db, eid):
+    endpoint = store.request_decommission(db, eid)
+    if endpoint is None:
         raise HTTPException(404, "endpoint not found")
-    return _endpoint_out(db, store.get_endpoint(db, eid))
+    return _endpoint_out(db, endpoint)
 
 
 @router.delete("/endpoints/{eid}")
@@ -545,9 +546,16 @@ def agent_heartbeat(authorization: str = Header(default=""),
 def agent_decommissioned(authorization: str = Header(default=""),
                          db: Session = Depends(get_db)):
     """The agent confirms it has self-destructed; drop its record (and its
-    deployments). Alert history is preserved."""
-    endpoint = _authed_endpoint(db, authorization)
-    store.delete_endpoint(db, endpoint.id)
+    deployments). Alert history is preserved.
+
+    Idempotent: if the row is already gone (e.g. the operator force-removed it
+    while the agent was confirming), the desired end state is reached, so this is
+    still a success - it does NOT 401 like the other agent endpoints, since that
+    would make the agent log a spurious failure."""
+    token = authorization.removeprefix("Bearer ").strip()
+    endpoint = store.get_endpoint_by_token(db, token) if token else None
+    if endpoint is not None:
+        store.delete_endpoint(db, endpoint.id)
     return PlainTextResponse("ok\n")
 
 

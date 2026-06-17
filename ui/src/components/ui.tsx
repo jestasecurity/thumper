@@ -57,8 +57,8 @@ export function DeployBadge({ state, triggered }: { state: DeploymentState; trig
 
 export function EndpointBadge({ status }: { status: EndpointStatus }) {
   const cls = status === "online" ? "deployed"
-    : status === "stale" || status === "decommissioning" ? "pending"
-    : "failed";
+    : status === "stale" ? "pending"
+    : "failed";   // inactive + decommissioning both use the red/danger style
   return (
     <span className={`badge ${cls}`}>
       <span className="dot" /> {status}

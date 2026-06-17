@@ -40,16 +40,17 @@ def _deployment(db, did, eid):
 
 # ── store ────────────────────────────────────────────────────────────────────
 
-def test_request_decommission_sets_flag(client_db):
+def test_request_decommission_sets_flag_and_returns_row(client_db):
     _, db = client_db
     _raw_endpoint(db, "ep_1", "tok_1")
-    assert store.request_decommission(db, "ep_1") is True
-    assert store.get_endpoint(db, "ep_1").decommission_requested_at is not None
+    ep = store.request_decommission(db, "ep_1")
+    assert ep is not None and ep.id == "ep_1"
+    assert ep.decommission_requested_at is not None
 
 
-def test_request_decommission_unknown_returns_false(client_db):
+def test_request_decommission_unknown_returns_none(client_db):
     _, db = client_db
-    assert store.request_decommission(db, "nope") is False
+    assert store.request_decommission(db, "nope") is None
 
 
 def test_delete_endpoint_removes_deployments_keeps_alerts(client_db):
@@ -108,6 +109,15 @@ def test_agent_confirm_deletes_endpoint(client_db):
     assert resp.status_code == 200
     db.expire_all()
     assert store.get_endpoint(db, "ep_1") is None
+
+
+def test_agent_confirm_is_idempotent_when_already_removed(client_db):
+    # Operator force-removed the endpoint while the agent was confirming: the row
+    # (and token) are already gone. Confirm must still succeed, not 401.
+    tc, _ = client_db
+    resp = tc.post("/api/agent/decommissioned", headers={"Authorization": "Bearer gone"})
+    assert resp.status_code == 200
+    assert resp.text.strip() == "ok"
 
 
 def test_force_delete_endpoint(client_db):

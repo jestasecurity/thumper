@@ -103,16 +103,17 @@ def touch_endpoint(db: Session, eid: str) -> None:
     db.commit()
 
 
-def request_decommission(db: Session, eid: str) -> bool:
-    """Flag an endpoint for self-destruct. Idempotent; False if the id is unknown.
-    The agent picks up the kill signal on its next heartbeat."""
+def request_decommission(db: Session, eid: str) -> Optional[Endpoint]:
+    """Flag an endpoint for self-destruct and return it (so the caller has the row
+    without a second query). Idempotent; None if the id is unknown. The agent
+    picks up the kill signal on its next heartbeat."""
     ep = db.query(Endpoint).filter(Endpoint.id == eid).first()
     if ep is None:
-        return False
+        return None
     if ep.decommission_requested_at is None:
         ep.decommission_requested_at = iso_now()
         db.commit()
-    return True
+    return ep
 
 
 def delete_endpoint(db: Session, eid: str) -> bool:
