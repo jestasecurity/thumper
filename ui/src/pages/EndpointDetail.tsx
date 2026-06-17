@@ -24,11 +24,14 @@ export default function EndpointDetail() {
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<{ tripwireId: string; name: string } | null>(null);
   const [confirm, setConfirm] = useState<"decommission" | "force" | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const nav = useNavigate();
 
+  // A bad/deleted id rejects the promise; show a terminal not-found state instead
+  // of hanging on "Loading…" forever (#21).
   const reload = useCallback(() => {
-    api.getEndpoint(id).then(setEp);
+    api.getEndpoint(id).then(setEp).catch(() => setNotFound(true));
   }, [id]);
 
   useEffect(() => {
@@ -45,6 +48,17 @@ export default function EndpointDetail() {
     return () => document.removeEventListener("mousedown", close);
   }, [showPicker]);
 
+  if (notFound) return (
+    <>
+      <Topbar title="Endpoint not found" />
+      <div className="content">
+        <div className="empty">
+          This endpoint doesn't exist or was removed.{" "}
+          <Link to="/endpoints">← All endpoints</Link>
+        </div>
+      </div>
+    </>
+  );
   if (!ep) return <div className="content">Loading…</div>;
 
   const onEndpoint = new Set(ep.deployments.map((d) => d.tripwire_id));
