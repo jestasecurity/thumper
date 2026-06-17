@@ -400,18 +400,13 @@ self_destruct() {
     tok=$(state_get "$STATE_FILE" agent_token)
     curl -fsS -X POST "$SERVER/api/agent/decommissioned" \
         -H "Authorization: Bearer $tok" >/dev/null 2>&1 || log "decommission confirm failed"
-    release_singleton
-    rm -f "$STATE_FILE" "$MANIFEST_FILE"
-    # Delete our own install dir - but never a dangerous/shared path. A
-    # misconfigured --state-file (e.g. /state.json) must not turn this into
-    # `rm -rf /` or wipe a home dir; in that case we leave the dir and just exit.
-    dir=$(cd "$(dirname "$STATE_FILE")" 2>/dev/null && pwd) || dir=""
-    case "$dir" in
-        ""|/|/home|/Users|/root|/etc|/var|/usr|/tmp|/opt|"$HOME")
-            err "refusing to rm -rf install dir '$dir' (unsafe); leaving it in place" ;;
-        *)
-            rm -rf "$dir" ;;
-    esac
+    release_singleton              # removes the agent.lock/ dir if it's ours
+    dir=$(dirname "$STATE_FILE")
+    # Remove only the files we created, then rmdir. No `rm -rf` on a derived path:
+    # rmdir is non-recursive and refuses a non-empty dir, so a misconfigured
+    # --state-file can never wipe '/', $HOME, or anything we didn't plant here.
+    rm -f "$STATE_FILE" "$MANIFEST_FILE" "$dir/agent.log" "$dir/thumper_agent.sh"
+    rmdir "$dir" 2>/dev/null || log "left $dir in place (not empty)"
     log "agent removed"
     exit 0
 }
