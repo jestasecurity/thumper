@@ -17,8 +17,11 @@ export default function TripwireDetail() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
-  const load = () => api.getTripwire(id).then(setTw);
+  // A bad/deleted id rejects the promise; show a terminal not-found state instead
+  // of hanging on "Loading…" forever (#21).
+  const load = () => api.getTripwire(id).then(setTw).catch(() => setNotFound(true));
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,6 +67,17 @@ export default function TripwireDetail() {
     }
   }
 
+  if (notFound) return (
+    <>
+      <Topbar title="Tripwire not found" />
+      <div className="content">
+        <div className="empty">
+          This tripwire doesn't exist or was deleted.{" "}
+          <Link to="/tripwires">← All tripwires</Link>
+        </div>
+      </div>
+    </>
+  );
   if (!tw) return <div className="content">Loading…</div>;
 
   return (
