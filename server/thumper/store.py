@@ -131,20 +131,34 @@ def delete_endpoint(db: Session, eid: str) -> bool:
 
 
 # ── deployments (instances) ──────────────────────────────────────────────────
-def materialize_deployment(db: Session, *, tripwire_id: str, endpoint_id: str,
-                           path: str, content: str) -> Deployment:
-    """Create the per-(tripwire,endpoint) instance if absent; else return existing."""
-    existing = db.query(Deployment).filter(
+def _find_deployment(db: Session, tripwire_id: str, endpoint_id: str) -> Optional[Deployment]:
+    return db.query(Deployment).filter(
         Deployment.tripwire_id == tripwire_id,
         Deployment.endpoint_id == endpoint_id,
     ).first()
+
+
+def materialize_deployment(db: Session, *, tripwire_id: str, endpoint_id: str,
+                           path: str, content: str) -> Deployment:
+    """Create the per-(tripwire,endpoint) instance if absent; else return existing.
+
+    Concurrency-safe: two requests for the same (tripwire, endpoint) can both pass
+    the existence check and both try to insert. The unique constraint lets exactly
+    one win; the loser catches the IntegrityError and returns the winner's row
+    instead of surfacing a 500 (e.g. an agent retrying on a flaky network)."""
+    existing = _find_deployment(db, tripwire_id, endpoint_id)
     if existing:
         return existing
     row = Deployment(id=_id("dp"), tripwire_id=tripwire_id, endpoint_id=endpoint_id,
                      path=path, content=content, hmac_secret=secrets.token_hex(32),
                      state="pending", created_at=iso_now())
     db.add(row)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Another request won the race between our check and insert.
+        return _find_deployment(db, tripwire_id, endpoint_id)
     db.refresh(row)
     return row
 
