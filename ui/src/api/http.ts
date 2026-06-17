@@ -78,7 +78,14 @@ export const httpApi = {
       { method: "DELETE" }),
 
   // Alerts
-  listAlerts: () => req<Alert[]>("/alerts"),
+  listAlerts: (status?: "open" | "resolved") =>
+    req<Alert[]>(`/alerts${status ? `?status=${status}` : ""}`),
+  resolveAlert: (id: string) => req<Alert>(`/alerts/${id}/resolve`, { method: "POST" }),
+  resolveDeploymentAlerts: (deploymentId: string) =>
+    req<{ resolved: number }>("/alerts/resolve", {
+      method: "POST",
+      body: JSON.stringify({ deployment_id: deploymentId }),
+    }),
 
   // Plugins / integrations
   listManifests: () => req<PluginManifest[]>("/manifests"),

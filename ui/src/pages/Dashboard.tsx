@@ -3,7 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { api } from "../api";
 import type { Alert, DashboardStats, Tripwire } from "../api";
-import { TripwireBadge, TypeTag, Topbar, timeAgo } from "../components/ui.tsx";
+import { AlertBadge, TripwireBadge, TypeTag, Topbar, timeAgo } from "../components/ui.tsx";
+
+type AlertFilter = "open" | "all" | "resolved";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -13,6 +15,7 @@ export default function Dashboard() {
   const [countdown, setCountdown] = useState(60);
   const [spinning, setSpinning] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [filter, setFilter] = useState<AlertFilter>("open");
   const nav = useNavigate();
   const countdownRef = useRef<ReturnType<typeof setInterval>>();
 
@@ -62,6 +65,18 @@ export default function Dashboard() {
     setCountdown(refreshInterval);
   }
 
+  const openAlerts = alerts.filter((a) => a.status === "open");
+  const shownAlerts = (filter === "all" ? alerts : alerts.filter((a) => a.status === filter));
+
+  function resolveOne(id: string) {
+    api.resolveAlert(id).then(reload);
+  }
+
+  function resolveAllOpen() {
+    const deployments = [...new Set(openAlerts.map((a) => a.deployment_id))];
+    Promise.all(deployments.map((d) => api.resolveDeploymentAlerts(d))).then(reload);
+  }
+
   return (
     <>
       <Topbar
@@ -81,9 +96,9 @@ export default function Dashboard() {
         }
       />
       <div className={`content${flash ? " reload-flash" : ""}`}>
-        {alerts.length > 0 && (
+        {openAlerts.length > 0 && (
           <div className="banner">
-            ⚠ <strong>{new Set(alerts.map((a) => a.endpoint_id)).size} endpoint(s) may be
+            ⚠ <strong>{new Set(openAlerts.map((a) => a.endpoint_id)).size} endpoint(s) may be
             compromised.</strong> A planted honeytoken was read - this almost always means a
             process is harvesting credentials.
           </div>
@@ -104,33 +119,57 @@ export default function Dashboard() {
           </div>
           <div className="stat alert">
             <div className="stat-val">{stats?.active_triggers ?? "-"}</div>
-            <div className="stat-label">Triggered instances</div>
+            <div className="stat-label">Active triggers</div>
           </div>
         </div>
 
         <div className="card">
           <div className="card-head">
             <h2>Recent alerts</h2>
-            <span className="muted">live trigger feed</span>
+            <span className="row" style={{ gap: 8, alignItems: "center" }}>
+              <span className="seg">
+                {(["open", "all", "resolved"] as AlertFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    className={`seg-btn${filter === f ? " active" : ""}`}
+                    onClick={() => setFilter(f)}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </span>
+              {openAlerts.length > 0 && (
+                <button className="btn small" onClick={resolveAllOpen}>
+                  Resolve all
+                </button>
+              )}
+            </span>
           </div>
-          {alerts.length === 0 ? (
-            <div className="empty">No alerts. All quiet on the endpoints. 🌵</div>
+          {shownAlerts.length === 0 ? (
+            <div className="empty">
+              {filter === "open"
+                ? "No open alerts. All quiet on the endpoints. 🌵"
+                : "Nothing here."}
+            </div>
           ) : (
             <table>
               <thead>
                 <tr>
                   <th>When</th>
+                  <th>Status</th>
                   <th>Endpoint</th>
                   <th>User</th>
                   <th>Process</th>
                   <th>Tripwire</th>
                   <th>Accessed path</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
-                {alerts.slice(0, 8).map((a) => (
+                {shownAlerts.slice(0, 8).map((a) => (
                   <tr key={a.id}>
                     <td className="muted">{timeAgo(a.timestamp)}</td>
+                    <td><AlertBadge status={a.status} /></td>
                     <td>
                       <Link to={`/endpoints/${a.endpoint_id}`}>{a.endpoint_hostname}</Link>
                     </td>
@@ -144,6 +183,13 @@ export default function Dashboard() {
                       <TypeTag type={a.token_type} />
                     </td>
                     <td className="path">{a.accessed_path ?? "-"}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {a.status === "open" && (
+                        <button className="btn small" onClick={() => resolveOne(a.id)}>
+                          Resolve
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

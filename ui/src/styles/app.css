@@ -202,6 +202,14 @@ tr.clickable:hover td { background: var(--bg-elev2); cursor: pointer; }
 .badge.pending { background: rgba(232, 200, 74, 0.12); color: var(--warn); border-color: rgba(232, 200, 74, 0.25); }
 .badge.failed, .badge.unknown,
 .badge.triggered { background: rgba(255, 93, 93, 0.12); color: var(--danger); border-color: rgba(255, 93, 93, 0.28); }
+.badge.resolved { background: rgba(139, 148, 168, 0.10); color: var(--text-dim); border-color: var(--border); }
+
+/* segmented filter (alert status: open / all / resolved) */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-btn { background: transparent; color: var(--text-dim); border: 0; padding: 5px 11px; font-size: 12px; cursor: pointer; text-transform: capitalize; }
+.seg-btn:not(:last-child) { border-right: 1px solid var(--border); }
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active { background: var(--bg-elev2); color: var(--accent); }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px 0 currentColor; }
 /* "live" pulse on healthy/online + active-threat badges */
 .badge.deployed .dot,

@@ -102,7 +102,11 @@ export interface Alert {
   event_type: string | null;
   timestamp: string;
   triggered_by: string | null;
+  status: AlertStatus;
+  resolved_at: string | null;
 }
+
+export type AlertStatus = "open" | "resolved";
 
 export interface ConfigField {
   key: string;

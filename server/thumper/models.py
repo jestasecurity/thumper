@@ -105,6 +105,12 @@ class AlertOut(BaseModel):
     event_type: Optional[str] = None
     timestamp: str
     triggered_by: Optional[str] = None
+    status: str                              # "open" | "resolved"
+    resolved_at: Optional[str] = None
+
+
+class ResolveAlertsIn(BaseModel):
+    deployment_id: str
 
 
 class DeliveryOut(BaseModel):

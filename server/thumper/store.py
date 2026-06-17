@@ -175,8 +175,40 @@ def create_alert(db: Session, *, deployment_id: str, tripwire_id: str,
     return row
 
 
-def list_alerts(db: Session) -> list[Alert]:
-    return db.query(Alert).order_by(Alert.timestamp.desc()).all()
+def list_alerts(db: Session, status: Optional[str] = None) -> list[Alert]:
+    """All alerts, newest first. `status` optionally filters to "open"
+    (unresolved) or "resolved"; anything else returns all."""
+    q = db.query(Alert)
+    if status == "open":
+        q = q.filter(Alert.resolved_at.is_(None))
+    elif status == "resolved":
+        q = q.filter(Alert.resolved_at.isnot(None))
+    return q.order_by(Alert.timestamp.desc()).all()
+
+
+def get_alert(db: Session, aid: str) -> Optional[Alert]:
+    return db.query(Alert).filter(Alert.id == aid).first()
+
+
+def resolve_alert(db: Session, aid: str) -> bool:
+    """Mark one alert resolved. Idempotent; returns False if the id is unknown."""
+    alert = db.query(Alert).filter(Alert.id == aid).first()
+    if alert is None:
+        return False
+    if alert.resolved_at is None:
+        alert.resolved_at = iso_now()
+        db.commit()
+    return True
+
+
+def resolve_deployment_alerts(db: Session, did: str) -> int:
+    """Resolve every open alert for a deployment. Returns how many were newly
+    resolved (already-resolved alerts are left untouched and not counted)."""
+    n = db.query(Alert).filter(
+        Alert.deployment_id == did, Alert.resolved_at.is_(None),
+    ).update({Alert.resolved_at: iso_now()})
+    db.commit()
+    return n
 
 
 def count_alerts_for_tripwire(db: Session, tripwire_id: str) -> int:
@@ -196,7 +228,10 @@ def count_alerts_since(db: Session, cutoff_iso: str) -> int:
 
 
 def count_distinct_alert_deployments(db: Session) -> int:
-    return db.query(func.count(distinct(Alert.deployment_id))).scalar() or 0
+    """Deployments with at least one OPEN alert - i.e. still-active triggers.
+    Resolving a deployment's alerts removes it from this count."""
+    return db.query(func.count(distinct(Alert.deployment_id))).filter(
+        Alert.resolved_at.is_(None)).scalar() or 0
 
 
 # ── batched counts (avoid N+1 in list endpoints) ─────────────────────────────

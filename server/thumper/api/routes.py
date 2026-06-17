@@ -31,6 +31,7 @@ from ..models import (
     IntegrationTestResult,
     InstallCommandOut,
     InstallSpecOut,
+    ResolveAlertsIn,
     TokenPreviewIn,
     TokenPreviewOut,
     TripwireDetailOut,
@@ -124,6 +125,8 @@ def _alert_out(alert) -> AlertOut:
         accessed_path=alert.accessed_path, process=alert.process, pid=alert.pid,
         os_user=alert.os_user, event_type=alert.event_type,
         timestamp=alert.timestamp, triggered_by=alert.triggered_by,
+        status="resolved" if alert.resolved_at else "open",
+        resolved_at=alert.resolved_at,
     )
 
 
@@ -295,8 +298,22 @@ def unassign_tripwire(eid: str, tid: str, db: Session = Depends(get_db)):
 
 # ── alerts ───────────────────────────────────────────────────────────────────
 @router.get("/alerts", response_model=list[AlertOut])
-def list_alerts(db: Session = Depends(get_db)):
-    return [_alert_out(alert) for alert in store.list_alerts(db)]
+def list_alerts(status: str | None = Query(default=None, pattern="^(open|resolved)$"),
+                db: Session = Depends(get_db)):
+    return [_alert_out(alert) for alert in store.list_alerts(db, status=status)]
+
+
+@router.post("/alerts/resolve")
+def resolve_deployment_alerts(body: ResolveAlertsIn, db: Session = Depends(get_db)):
+    """Bulk-resolve every open alert for a deployment."""
+    return {"resolved": store.resolve_deployment_alerts(db, body.deployment_id)}
+
+
+@router.post("/alerts/{aid}/resolve", response_model=AlertOut)
+def resolve_alert(aid: str, db: Session = Depends(get_db)):
+    if not store.resolve_alert(db, aid):
+        raise HTTPException(404, "alert not found")
+    return _alert_out(store.get_alert(db, aid))
 
 
 @router.get("/alerts/{aid}/deliveries", response_model=list[DeliveryOut])

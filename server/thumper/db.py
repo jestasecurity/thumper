@@ -77,6 +77,8 @@ class Alert(Base):
     event_type = Column(String(255))
     timestamp = Column(String(255), nullable=False)
     triggered_by = Column(String(255))
+    # NULL = open (unresolved). Set to an ISO timestamp when a user resolves it.
+    resolved_at = Column(String(255))
     __table_args__ = (
         Index("ix_alert_deployment", "deployment_id"),
         Index("ix_alert_tripwire", "tripwire_id"),

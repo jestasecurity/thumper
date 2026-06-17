@@ -1,0 +1,119 @@
+"""Alert lifecycle: manual resolve (Open → Resolved), per-alert + bulk."""
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from thumper import store
+from thumper.db import Base, get_db
+from thumper.main import app
+
+
+@pytest.fixture
+def client_db():
+    engine = create_engine("sqlite://", echo=False,
+                           connect_args={"check_same_thread": False},
+                           poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    app.dependency_overrides[get_db] = lambda: db
+    yield TestClient(app), db
+    del app.dependency_overrides[get_db]
+    db.close()
+
+
+def _mk(db, *, did, tid="tw_1", eid="ep_1"):
+    return store.create_alert(
+        db, deployment_id=did, tripwire_id=tid, endpoint_id=eid,
+        tripwire_name="AWS creds", endpoint_hostname="host-1", token_type="aws",
+        accessed_path="~/.aws/credentials", process="cat", pid=1, os_user="root",
+        event_type="openat", timestamp="2026-06-17T10:00:00Z", triggered_by="cat")
+
+
+# ── store ────────────────────────────────────────────────────────────────────
+
+def test_new_alert_is_open(client_db):
+    _, db = client_db
+    a = _mk(db, did="dp_1")
+    assert a.resolved_at is None
+
+
+def test_resolve_alert_sets_timestamp(client_db):
+    _, db = client_db
+    a = _mk(db, did="dp_1")
+    assert store.resolve_alert(db, a.id) is True
+    db.refresh(a)
+    assert a.resolved_at is not None
+
+
+def test_resolve_unknown_alert_returns_false(client_db):
+    _, db = client_db
+    assert store.resolve_alert(db, "nope") is False
+
+
+def test_bulk_resolve_for_deployment(client_db):
+    _, db = client_db
+    _mk(db, did="dp_1"); _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    assert store.resolve_deployment_alerts(db, "dp_1") == 2
+    # a second call resolves nothing new
+    assert store.resolve_deployment_alerts(db, "dp_1") == 0
+    assert store.count_alerts_for_deployment(db, "dp_2") == 1
+
+
+def test_active_triggers_counts_open_deployments_only(client_db):
+    _, db = client_db
+    _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    assert store.count_distinct_alert_deployments(db) == 2
+    store.resolve_deployment_alerts(db, "dp_1")
+    assert store.count_distinct_alert_deployments(db) == 1
+
+
+def test_list_alerts_status_filter(client_db):
+    _, db = client_db
+    a = _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    store.resolve_alert(db, a.id)
+    assert len(store.list_alerts(db)) == 2
+    assert len(store.list_alerts(db, status="open")) == 1
+    assert len(store.list_alerts(db, status="resolved")) == 1
+
+
+# ── API ──────────────────────────────────────────────────────────────────────
+
+def test_alert_out_exposes_status(client_db):
+    tc, db = client_db
+    _mk(db, did="dp_1")
+    body = tc.get("/api/alerts").json()
+    assert body[0]["status"] == "open"
+    assert body[0]["resolved_at"] is None
+
+
+def test_resolve_alert_endpoint(client_db):
+    tc, db = client_db
+    a = _mk(db, did="dp_1")
+    resp = tc.post(f"/api/alerts/{a.id}/resolve")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "resolved"
+    assert resp.json()["resolved_at"] is not None
+
+
+def test_resolve_unknown_alert_endpoint_404(client_db):
+    tc, _ = client_db
+    assert tc.post("/api/alerts/nope/resolve").status_code == 404
+
+
+def test_bulk_resolve_endpoint(client_db):
+    tc, db = client_db
+    _mk(db, did="dp_1"); _mk(db, did="dp_1")
+    resp = tc.post("/api/alerts/resolve", json={"deployment_id": "dp_1"})
+    assert resp.status_code == 200
+    assert resp.json() == {"resolved": 2}
+    assert all(a["status"] == "resolved" for a in tc.get("/api/alerts").json())
+
+
+def test_stats_active_triggers_reflects_open(client_db):
+    tc, db = client_db
+    _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    assert tc.get("/api/stats").json()["active_triggers"] == 2
+    tc.post("/api/alerts/resolve", json={"deployment_id": "dp_1"})
+    assert tc.get("/api/stats").json()["active_triggers"] == 1

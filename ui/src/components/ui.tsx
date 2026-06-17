@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { DeploymentState, EndpointStatus } from "../api";
+import type { AlertStatus, DeploymentState, EndpointStatus } from "../api";
 
 export function Topbar({ title, action }: { title: string; action?: ReactNode }) {
   return (
@@ -13,6 +13,15 @@ export function Topbar({ title, action }: { title: string; action?: ReactNode })
 
 export function TypeTag({ type }: { type: string }) {
   return <span className="type-tag">{type}</span>;
+}
+
+/** Alert lifecycle status: open (still active) or resolved (acknowledged). */
+export function AlertBadge({ status }: { status: AlertStatus }) {
+  return (
+    <span className={`badge ${status === "open" ? "triggered" : "resolved"}`}>
+      <span className="dot" /> {status}
+    </span>
+  );
 }
 
 /** Tripwire (definition) rollup status, derived from its instances. */
