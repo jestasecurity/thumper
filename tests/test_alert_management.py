@@ -117,3 +117,51 @@ def test_stats_active_triggers_reflects_open(client_db):
     assert tc.get("/api/stats").json()["active_triggers"] == 2
     tc.post("/api/alerts/resolve", json={"deployment_id": "dp_1"})
     assert tc.get("/api/stats").json()["active_triggers"] == 1
+
+
+# ── trigger counts everywhere reflect OPEN alerts only ───────────────────────
+
+def test_endpoint_trigger_count_is_open_only(client_db):
+    _, db = client_db
+    a = _mk(db, did="dp_1", eid="ep_1"); _mk(db, did="dp_2", eid="ep_1")
+    assert store.count_alerts_for_endpoint(db, "ep_1") == 2
+    store.resolve_alert(db, a.id)
+    assert store.count_alerts_for_endpoint(db, "ep_1") == 1
+
+
+def test_tripwire_trigger_count_is_open_only(client_db):
+    _, db = client_db
+    a = _mk(db, did="dp_1", tid="tw_1"); _mk(db, did="dp_2", tid="tw_1")
+    assert store.count_alerts_for_tripwire(db, "tw_1") == 2
+    store.resolve_alert(db, a.id)
+    assert store.count_alerts_for_tripwire(db, "tw_1") == 1
+
+
+def test_deployment_trigger_count_is_open_only(client_db):
+    _, db = client_db
+    a = _mk(db, did="dp_1"); _mk(db, did="dp_1")
+    assert store.count_alerts_for_deployment(db, "dp_1") == 2
+    store.resolve_alert(db, a.id)
+    assert store.count_alerts_for_deployment(db, "dp_1") == 1
+
+
+def test_batched_counts_are_open_only(client_db):
+    _, db = client_db
+    a = _mk(db, did="dp_1", eid="ep_1", tid="tw_1")
+    _mk(db, did="dp_2", eid="ep_1", tid="tw_1")
+    store.resolve_alert(db, a.id)
+    assert store.alert_counts_by_endpoint(db)["ep_1"] == 1
+    assert store.alert_counts_by_tripwire(db)["tw_1"] == 1
+
+
+def test_endpoints_api_trigger_count_decays(client_db):
+    tc, db = client_db
+    from thumper.db import Endpoint
+    db.add(Endpoint(id="ep_1", hostname="h", platform="linux", machine_id="m1",
+                    agent_token="t", enrolled_at="2026-01-01T00:00:00Z",
+                    last_seen="2026-01-01T00:00:00Z"))
+    db.commit()
+    _mk(db, did="dp_1", eid="ep_1")
+    assert tc.get("/api/endpoints").json()[0]["triggered_count"] == 1
+    tc.post("/api/alerts/resolve", json={"deployment_id": "dp_1"})
+    assert tc.get("/api/endpoints").json()[0]["triggered_count"] == 0

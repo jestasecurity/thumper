@@ -211,16 +211,23 @@ def resolve_deployment_alerts(db: Session, did: str) -> int:
     return n
 
 
+# The "triggered" rollups below count only OPEN (unresolved) alerts, so the red
+# "triggered" badges across the UI clear in lockstep with the dashboard's active
+# count once an operator resolves them. `count_alerts_since` is deliberately not
+# filtered - it's a 24h volume metric, not an active-state indicator.
 def count_alerts_for_tripwire(db: Session, tripwire_id: str) -> int:
-    return db.query(Alert).filter(Alert.tripwire_id == tripwire_id).count()
+    return db.query(Alert).filter(
+        Alert.tripwire_id == tripwire_id, Alert.resolved_at.is_(None)).count()
 
 
 def count_alerts_for_endpoint(db: Session, endpoint_id: str) -> int:
-    return db.query(Alert).filter(Alert.endpoint_id == endpoint_id).count()
+    return db.query(Alert).filter(
+        Alert.endpoint_id == endpoint_id, Alert.resolved_at.is_(None)).count()
 
 
 def count_alerts_for_deployment(db: Session, deployment_id: str) -> int:
-    return db.query(Alert).filter(Alert.deployment_id == deployment_id).count()
+    return db.query(Alert).filter(
+        Alert.deployment_id == deployment_id, Alert.resolved_at.is_(None)).count()
 
 
 def count_alerts_since(db: Session, cutoff_iso: str) -> int:
@@ -249,13 +256,13 @@ def deployment_counts_by_endpoint(db: Session) -> dict[str, int]:
 
 def alert_counts_by_tripwire(db: Session) -> dict[str, int]:
     rows = db.query(Alert.tripwire_id, func.count(Alert.id)) \
-        .group_by(Alert.tripwire_id).all()
+        .filter(Alert.resolved_at.is_(None)).group_by(Alert.tripwire_id).all()
     return {tid: n for tid, n in rows}
 
 
 def alert_counts_by_endpoint(db: Session) -> dict[str, int]:
     rows = db.query(Alert.endpoint_id, func.count(Alert.id)) \
-        .group_by(Alert.endpoint_id).all()
+        .filter(Alert.resolved_at.is_(None)).group_by(Alert.endpoint_id).all()
     return {eid: n for eid, n in rows}
 
 
