@@ -24,13 +24,29 @@ BASE_URL = os.environ.get("THUMPER_BASE_URL", "http://localhost:8000").rstrip("/
 # Shared enrollment token: an agent presents this to POST /api/enroll. The org
 # embeds it in the install command it distributes (via MDM/SSH/etc). Dev default
 # is obvious-and-insecure on purpose - override in production.
-ENROLL_TOKEN = os.environ.get("THUMPER_ENROLL_TOKEN", "dev-enroll-token")
+_DEFAULT_ENROLL_TOKEN = "dev-enroll-token"
+ENROLL_TOKEN = os.environ.get("THUMPER_ENROLL_TOKEN", _DEFAULT_ENROLL_TOKEN)
 
 # Admin token gating the installer endpoint (GET /api/install.sh). The installer
 # embeds the ENROLL_TOKEN, so it must not be fetchable anonymously; only the
 # server-generated deploy command (which carries this token) can retrieve it.
 # Dev default is obvious-and-insecure on purpose - override in production.
-INSTALL_TOKEN = os.environ.get("THUMPER_INSTALL_TOKEN", "dev-install-token")
+_DEFAULT_INSTALL_TOKEN = "dev-install-token"
+INSTALL_TOKEN = os.environ.get("THUMPER_INSTALL_TOKEN", _DEFAULT_INSTALL_TOKEN)
+
+
+def insecure_default_tokens(enroll: str | None = None, install: str | None = None) -> list[str]:
+    """Names of the shared tokens still set to their built-in dev defaults.
+    Used to warn loudly at startup so a production deploy doesn't silently run
+    with publicly-known credentials."""
+    enroll = ENROLL_TOKEN if enroll is None else enroll
+    install = INSTALL_TOKEN if install is None else install
+    flagged = []
+    if enroll == _DEFAULT_ENROLL_TOKEN:
+        flagged.append("THUMPER_ENROLL_TOKEN")
+    if install == _DEFAULT_INSTALL_TOKEN:
+        flagged.append("THUMPER_INSTALL_TOKEN")
+    return flagged
 
 # Built static UI (ui/dist) - mounted at / when present (Docker / monolith mode).
 UI_DIST = Path(os.environ.get("THUMPER_UI_DIST", str(REPO_ROOT / "ui" / "dist")))
