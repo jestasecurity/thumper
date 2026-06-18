@@ -46,6 +46,9 @@ EVENT = {"alert_id": "al_1", "tripwire_name": "aws-creds", "process": "node (pid
 def module(monkeypatch):
     mod = load_plugin_module()
     monkeypatch.setattr(mod, "_now_unix", lambda: 1749369600)
+    # These tests use a non-resolvable fake host ("recv") and only exercise
+    # signing/headers - neutralize the SSRF guard (covered in test_ssrf.py).
+    monkeypatch.setattr(mod, "assert_url_allowed", lambda url: None)
     return mod
 
 

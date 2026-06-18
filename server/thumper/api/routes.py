@@ -47,6 +47,7 @@ from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
 from ..services.integrations import mask_config, merge_config, saved_config
 from ..services.signing import verify
+from ..services.ssrf import SsrfError, assert_config_urls_allowed
 from ..tokens import TOKEN_TYPES
 
 router = APIRouter(prefix="/api")
@@ -400,6 +401,10 @@ def save_integration(plugin: str, config: dict, db: Session = Depends(get_db)):
     if manifest is None:
         raise HTTPException(404, "unknown plugin")
     merged = merge_config(saved_config(db, plugin), config)
+    try:
+        assert_config_urls_allowed(plugin, merged)  # SSRF guard (#74)
+    except SsrfError as exc:
+        raise HTTPException(400, str(exc))
     store.upsert_integration(db, plugin=plugin, kind=manifest["kind"], config=merged)
     return IntegrationOut(plugin=plugin, kind=manifest["kind"], configured=True,
                           config=mask_config(manifest, merged))
