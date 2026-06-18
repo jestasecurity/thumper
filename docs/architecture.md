@@ -90,3 +90,13 @@ All options overridable via environment:
 | `THUMPER_AGENT_PATH` | `./agent/thumper_agent.sh` | Agent script to serve |
 | `THUMPER_PLUGINS_DIR` | `./plugins` | Plugin discovery root |
 | `THUMPER_DASHBOARD_REFRESH` | `60` | Auto-refresh interval (seconds, 0 = off) |
+
+## Security & trust model
+
+Endpoints **trust the server** (trust-on-first-use): the install command pipes a
+server-built script into `sudo sh`, and the agent then fetches bait and posts
+callbacks at URLs the server hands it. So in production `THUMPER_BASE_URL` **must
+be `https://`** (directly or via a TLS-terminating proxy) — over plaintext http a
+network MITM can serve a malicious agent and get root on endpoints. The server
+logs a warning at startup if `BASE_URL` is plaintext http to a non-loopback host
+(`http://localhost` is fine for development).

@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api import router
-from .config import UI_DIST, insecure_default_tokens
+from .config import UI_DIST, insecure_base_url, insecure_default_tokens
 from .db import init_db
 
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +30,12 @@ async def lifespan(app: FastAPI):
             "guess them. Set them to random secrets (env vars) before production.",
             ", ".join(flagged),
         )
+    if insecure_base_url():
+        log.warning(
+            "SECURITY: THUMPER_BASE_URL is plaintext http:// to a non-loopback "
+            "host - endpoints fetch the agent/bait and post callbacks in "
+            "cleartext, so a MITM can serve a malicious agent (root RCE). Use "
+            "https:// (or a TLS-terminating proxy) in production.")
     yield
 
 

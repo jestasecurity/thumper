@@ -5,8 +5,22 @@ parents up) so `uvicorn thumper.main:app` works from a checkout with no setup.
 """
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", ""}
+
+
+def insecure_base_url(base_url: str | None = None) -> bool:
+    """True when BASE_URL is plaintext http:// to a NON-loopback host - i.e.
+    endpoints would download the agent/bait and post callbacks in cleartext, so a
+    MITM can serve a malicious agent (root RCE). http://localhost is the legit dev
+    default and is NOT flagged."""
+    parsed = urlparse(BASE_URL if base_url is None else base_url)
+    if parsed.scheme != "http":
+        return False
+    return (parsed.hostname or "").lower() not in _LOOPBACK_HOSTS
 
 # Directory holding the installable plugins (each: plugin.py + manifest.yaml).
 # This is the repo-root `plugins/` tree, NOT server/thumper/plugins/ (which is
