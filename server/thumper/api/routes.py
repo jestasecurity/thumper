@@ -7,6 +7,7 @@ Two distinct contracts live here:
     line-based protocol so the endpoint agent can be pure Bash (curl + openssl,
     no JSON parser). See docs/architecture.md.
 """
+import hmac
 import json
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
@@ -55,6 +56,12 @@ _INACTIVE_WINDOW = timedelta(hours=12)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+def _token_eq(provided: str, expected: str) -> bool:
+    """Constant-time token comparison (avoids a timing side-channel on the shared
+    enroll/install tokens)."""
+    return hmac.compare_digest(provided, expected)
+
+
 def _parse_ts(timestamp: str | None):
     if not timestamp:
         return None
@@ -470,7 +477,7 @@ def install_script(tripwire: list[str] = Query(default=[]), token: str = Query(d
     The script embeds ENROLL_TOKEN, so it is gated behind INSTALL_TOKEN - only
     the server-generated deploy command (which carries the token) can fetch it.
     """
-    if token != INSTALL_TOKEN:
+    if not _token_eq(token, INSTALL_TOKEN):
         raise HTTPException(401, "invalid install token")
     tw_args = " ".join(f"--tripwire {t}" for t in tripwire)
     script = f"""#!/bin/sh
@@ -507,7 +514,7 @@ async def agent_tripwire_paths(request: Request, db: Session = Depends(get_db)):
     def field(key: str) -> str:
         return (form.get(key) or [""])[0]
 
-    if field("enroll_token") != ENROLL_TOKEN:
+    if not _token_eq(field("enroll_token"), ENROLL_TOKEN):
         raise HTTPException(401, "invalid enroll token")
     lines = []
     for tid in [t.strip() for t in field("tripwire_ids").split(",") if t.strip()]:
@@ -528,7 +535,7 @@ async def enroll(request: Request, db: Session = Depends(get_db)):
     def field(key: str) -> str:
         return (form.get(key) or [""])[0]
 
-    if field("enroll_token") != ENROLL_TOKEN:
+    if not _token_eq(field("enroll_token"), ENROLL_TOKEN):
         raise HTTPException(401, "invalid enroll token")
     endpoint = store.enroll_endpoint(db, hostname=field("hostname"),
                                      platform=field("platform") or None,
