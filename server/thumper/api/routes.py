@@ -488,6 +488,18 @@ DIR="${{THUMPER_DIR:-/usr/local/thumper}}"
 for tool in curl openssl; do
   command -v "$tool" >/dev/null 2>&1 || {{ echo "thumper: $tool is required"; exit 1; }}
 done
+# Linux read detection prefers inotify; ensure inotify-tools (every main distro
+# packages it, none preinstall it). Best-effort - the agent falls back to atime
+# polling if this can't run (offline / locked-down host).
+if [ "$(uname -s)" = "Linux" ] && ! command -v inotifywait >/dev/null 2>&1; then
+  ( if command -v apt-get >/dev/null 2>&1; then apt-get update -qq && apt-get install -y inotify-tools;
+    elif command -v dnf >/dev/null 2>&1; then dnf install -y inotify-tools;
+    elif command -v yum >/dev/null 2>&1; then yum install -y inotify-tools;
+    elif command -v zypper >/dev/null 2>&1; then zypper -n install inotify-tools;
+    elif command -v apk >/dev/null 2>&1; then apk add inotify-tools;
+    elif command -v pacman >/dev/null 2>&1; then pacman -Sy --noconfirm inotify-tools;
+    fi ) >/dev/null 2>&1 || echo "thumper: could not install inotify-tools; using atime fallback"
+fi
 mkdir -p "$DIR"
 curl -fsSL "$SERVER/api/agent/thumper_agent.sh" -o "$DIR/thumper_agent.sh"
 chmod +x "$DIR/thumper_agent.sh"
