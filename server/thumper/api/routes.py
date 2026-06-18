@@ -46,6 +46,7 @@ from ..services.alerting import deliver_alert
 from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
 from ..services.integrations import mask_config, merge_config, saved_config
+from ..services.secrets_crypto import unpack_config
 from ..services.signing import verify
 from ..tokens import TOKEN_TYPES
 
@@ -383,7 +384,7 @@ def list_integrations(db: Session = Depends(get_db)):
     out = []
     for manifest in public_manifests():
         rec = saved.get(manifest["name"])
-        config = mask_config(manifest, json.loads(rec.config_json)) if rec else {}
+        config = mask_config(manifest, unpack_config(rec.config_json)) if rec else {}
         out.append(IntegrationOut(
             plugin=manifest["name"], kind=manifest["kind"],
             configured=bool(rec and rec.configured), config=config,

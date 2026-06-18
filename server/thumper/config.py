@@ -48,6 +48,11 @@ def insecure_default_tokens(enroll: str | None = None, install: str | None = Non
         flagged.append("THUMPER_INSTALL_TOKEN")
     return flagged
 
+# Secret used to encrypt integration config (plugin credentials) at rest (#24).
+# Any non-empty string; a Fernet key is derived from it. Unset -> config is
+# stored as plaintext (a startup warning fires).
+SECRET_KEY = os.environ.get("THUMPER_SECRET_KEY") or None
+
 # Built static UI (ui/dist) - mounted at / when present (Docker / monolith mode).
 UI_DIST = Path(os.environ.get("THUMPER_UI_DIST", str(REPO_ROOT / "ui" / "dist")))
 

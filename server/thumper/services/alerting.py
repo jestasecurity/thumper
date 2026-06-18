@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from .. import store
 from ..db import SessionLocal
+from .secrets_crypto import unpack_config
 from ..plugins.registry import load_plugin
 
 log = logging.getLogger("thumper.alerting")
@@ -25,7 +26,7 @@ def route_alert(db: Session, event: dict) -> None:
             continue
         plugin_name = integration.plugin
         try:
-            plugin = load_plugin(plugin_name, json.loads(integration.config_json))
+            plugin = load_plugin(plugin_name, unpack_config(integration.config_json))
             plugin.alert(event)
             status, error = "ok", None
         except Exception as exc:  # noqa: BLE001 - best-effort fan-out

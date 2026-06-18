@@ -12,6 +12,7 @@ dependencies = [
   "httpx>=0.27",
   "sqlalchemy>=2.0",
   "alembic>=1.13",
+  "cryptography>=42.0",
 ]
 
 [project.optional-dependencies]

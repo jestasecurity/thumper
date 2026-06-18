@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .api import router
 from .config import UI_DIST, insecure_default_tokens
 from .db import init_db
+from .services.secrets_crypto import encryption_enabled
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("thumper")
@@ -30,6 +31,10 @@ async def lifespan(app: FastAPI):
             "guess them. Set them to random secrets (env vars) before production.",
             ", ".join(flagged),
         )
+    if not encryption_enabled():
+        log.warning(
+            "SECURITY: integration secrets are stored UNENCRYPTED at rest - set "
+            "THUMPER_SECRET_KEY to encrypt them (#24).")
     yield
 
 

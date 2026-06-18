@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import store
 from ..plugins.registry import get_manifest
+from .secrets_crypto import unpack_config
 
 
 def mask_config(manifest: dict, config: dict) -> dict:
@@ -20,7 +21,7 @@ def mask_config(manifest: dict, config: dict) -> dict:
 
 def saved_config(db: Session, plugin: str) -> dict:
     row = store.get_integration(db, plugin)
-    return json.loads(row.config_json) if row else {}
+    return unpack_config(row.config_json) if row else {}
 
 
 def merge_config(existing: dict, incoming: dict) -> dict:
