@@ -1,0 +1,27 @@
+name: Trigger Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: jestasecurity
+          repositories: workflows
+
+      - name: Dispatch deploy to workflows repo
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository: jestasecurity/workflows
+          event-type: deploy-thumper
