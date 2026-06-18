@@ -60,8 +60,15 @@ def distribute(conn, tripwire_id: str) -> dict:
     install = build_install(tripwire_id)
     results = []
     for integ in configured:
-        plugin = load_plugin(integ.plugin, json.loads(integ.config_json))
-        res = plugin.deploy(install, [])
-        results.append({"plugin": integ.plugin, "state": res.state,
-                        "deployed_count": res.deployed_count, "message": res.message})
+        # Isolate each plugin: one failing (bad creds, unreachable host, a bug)
+        # must not abort the rest or discard their results - report it as failed
+        # and carry on.
+        try:
+            plugin = load_plugin(integ.plugin, json.loads(integ.config_json))
+            res = plugin.deploy(install, [])
+            results.append({"plugin": integ.plugin, "state": res.state,
+                            "deployed_count": res.deployed_count, "message": res.message})
+        except Exception as exc:  # noqa: BLE001 - one plugin must not break the others
+            results.append({"plugin": integ.plugin, "state": "failed",
+                            "deployed_count": 0, "message": str(exc)})
     return {"results": results}
