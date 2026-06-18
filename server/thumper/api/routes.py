@@ -62,6 +62,21 @@ def _token_eq(provided: str, expected: str) -> bool:
     return hmac.compare_digest(provided, expected)
 
 
+def _validate_bait_path(path: str) -> str:
+    """A bait path is planted by the (root) agent, so a malformed one is a write
+    primitive. Require an absolute or home-rooted path and reject traversal. This
+    blocks `..` and relative paths injected via the (currently open) create API;
+    constraining which absolute roots are allowed is a separate policy decision."""
+    p = (path or "").strip()
+    if not p:
+        raise HTTPException(400, "path is required")
+    if ".." in p.split("/"):
+        raise HTTPException(400, "path must not contain '..'")
+    if not (p.startswith("/") or p.startswith("~")):
+        raise HTTPException(400, "path must be absolute (/...) or home-rooted (~/...)")
+    return p
+
+
 def _parse_ts(timestamp: str | None):
     if not timestamp:
         return None
@@ -170,6 +185,7 @@ def list_tripwires(db: Session = Depends(get_db)):
 
 @router.post("/tripwires", response_model=TripwireOut)
 def create_tripwire(body: CreateTripwireIn, db: Session = Depends(get_db)):
+    path = _validate_bait_path(body.path)
     if body.source == "custom" and not body.custom_content:
         raise HTTPException(400, "custom source requires custom_content")
     token = body.token or render_content(
@@ -177,7 +193,7 @@ def create_tripwire(body: CreateTripwireIn, db: Session = Depends(get_db)):
         custom_content=body.custom_content,
     )
     tripwire = store.create_tripwire(
-        db, name=body.name, token_type=body.token_type, path=body.path,
+        db, name=body.name, token_type=body.token_type, path=path,
         source=body.source, custom_content=body.custom_content, token=token,
     )
     return _tripwire_out(db, tripwire)

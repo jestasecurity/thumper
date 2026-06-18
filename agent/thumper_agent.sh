@@ -271,6 +271,12 @@ report_plant() {            # report_plant <deployment_id> <state>
 
 plant() {  # plant <i>
     eval "id=\$dep_id_$1 path=\$dep_path_$1 url=\$dep_content_$1"
+    # Defense-in-depth: never act on a traversal path from the server. The server
+    # validates on tripwire creation, but the agent runs as root, so don't trust
+    # a `..` path even from an authenticated-but-compromised control plane.
+    case "/$path/" in
+        */../*) err "refusing bait path with '..': $path - skipping $id"; report_plant "$id" failed; return 1 ;;
+    esac
     parent=$(dirname "$path")
     [ -z "$parent" ] || mkdir -p "$parent"
 
