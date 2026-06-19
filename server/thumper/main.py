@@ -13,15 +13,23 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api import router
-from .config import UI_DIST
+from .config import UI_DIST, insecure_default_tokens
 from .db import init_db
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("thumper")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    flagged = insecure_default_tokens()
+    if flagged:
+        log.warning(
+            "SECURITY: %s still set to the built-in dev default(s) - anyone can "
+            "guess them. Set them to random secrets (env vars) before production.",
+            ", ".join(flagged),
+        )
     yield
 
 
