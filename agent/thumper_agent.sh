@@ -103,6 +103,19 @@ lock_holder_alive() {
         && ps -p "$oldpid" -o command= 2>/dev/null | grep -q thumper_agent
 }
 
+# Another agent already watches this install location (the singleton). Don't start
+# a second watcher - instead register our tripwire(s) with the server so the
+# running agent plants them on its next live-sync (#12). Enroll is idempotent
+# (same machine_id -> same endpoint + token), so this is safe even for an
+# accidental identical re-run.
+register_with_running_agent() {
+    log "another agent is already running (pid $oldpid); registering tripwires for it"
+    [ "$FORCE" = 1 ] || preflight_paths || exit 1
+    do_enroll || { err "enroll failed"; exit 1; }
+    log "registered; the running agent will plant on its next sync (<=${SYNC_INTERVAL}s)"
+    exit 0
+}
+
 acquire_singleton() {
     LOCK_DIR="$(dirname "$STATE_FILE")/agent.lock"
     mkdir -p "$(dirname "$LOCK_DIR")"             # ensure the state dir exists
@@ -113,8 +126,7 @@ acquire_singleton() {
             return 0
         fi
         if lock_holder_alive; then
-            log "another agent is already running (pid $oldpid); exiting"
-            exit 0
+            register_with_running_agent
         fi
         err "clearing stale lock (holder '${oldpid:-?}' is not a live agent)"
         rm -rf "$LOCK_DIR"
@@ -124,8 +136,7 @@ acquire_singleton() {
     # Sustained contention: a peer keeps winning the mkdir. Defer to it if it's a
     # live agent rather than killing a legitimately-needed start.
     if lock_holder_alive; then
-        log "another agent is already running (pid $oldpid); exiting"
-        exit 0
+        register_with_running_agent
     fi
     err "could not acquire singleton lock"; exit 1
 }
