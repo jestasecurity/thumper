@@ -32,6 +32,13 @@ def test_rejects_traversal_and_relative_paths(client, bad):
     assert _create(client, bad).status_code == 400
 
 
+# `~user/` passes a naive `startswith("~")` but the agent's expand_path only
+# expands `~/`, so the root agent would use it literally (#76 review).
+@pytest.mark.parametrize("bad", ["~postgres/.pgpass", "~root/.ssh/id_rsa", "~~/x"])
+def test_rejects_other_user_home_paths(client, bad):
+    assert _create(client, bad).status_code == 400
+
+
 @pytest.mark.parametrize("ok", ["~/.aws/credentials", "/etc/ssh/ssh_host_ed25519_key"])
 def test_accepts_absolute_and_home_paths(client, ok):
     resp = _create(client, ok)

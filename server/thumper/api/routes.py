@@ -72,7 +72,11 @@ def _validate_bait_path(path: str) -> str:
         raise HTTPException(400, "path is required")
     if ".." in p.split("/"):
         raise HTTPException(400, "path must not contain '..'")
-    if not (p.startswith("/") or p.startswith("~")):
+    # Accept only `~/` (current user's home), NOT `~user/`: the agent's expand_path
+    # expands only `~/`, so a `~postgres/.pgpass` would pass here but be used
+    # literally by the root agent (`mkdir -p ~postgres` under CWD) - bait lands in
+    # a junk dir while the dashboard reports it deployed.
+    if not (p.startswith("/") or p == "~" or p.startswith("~/")):
         raise HTTPException(400, "path must be absolute (/...) or home-rooted (~/...)")
     return p
 
