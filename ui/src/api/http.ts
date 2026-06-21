@@ -20,6 +20,18 @@ import type {
 
 const BASE = "/api";
 
+// Carries the HTTP status so callers can distinguish a 404 (show a not-found
+// state) from a transient 5xx/network failure (show an error). The message keeps
+// the `${status}: ${detail}` shape existing call sites already surface.
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "content-type": "application/json" },
@@ -33,7 +45,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* non-JSON error body */
     }
-    throw new Error(`${res.status}: ${detail}`);
+    throw new ApiError(res.status, `${res.status}: ${detail}`);
   }
   return res.json() as Promise<T>;
 }
