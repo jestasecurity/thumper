@@ -27,3 +27,18 @@ def merge_config(existing: dict, incoming: dict) -> dict:
     """Apply non-empty incoming values over existing. Blank secret fields left
     untouched so re-saving a form without re-typing secrets doesn't wipe them."""
     return {**existing, **{k: v for k, v in incoming.items() if v not in (None, "")}}
+
+
+def redact_secrets(text: str, config: dict) -> str:
+    """Strip credential material from an error string before it's stored/logged.
+    Replaces each non-trivial config value (tokens, and full URLs that may embed
+    a token in their path/query, e.g. a Slack webhook) with a placeholder (#33).
+    Over-redaction is acceptable - never leak a secret into a delivery error."""
+    if not text:
+        return text
+    # Longest first so a URL containing a token redacts as one unit.
+    for value in sorted((v for v in config.values() if isinstance(v, str)),
+                        key=len, reverse=True):
+        if len(value) >= 6:
+            text = text.replace(value, "•••")
+    return text

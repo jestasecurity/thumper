@@ -45,7 +45,7 @@ from ..plugins.registry import get_manifest, load_plugin, public_manifests
 from ..services.alerting import deliver_alert
 from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
-from ..services.integrations import mask_config, merge_config, saved_config
+from ..services.integrations import mask_config, merge_config, redact_secrets, saved_config
 from ..services.signing import verify
 from ..tokens import TOKEN_TYPES
 
@@ -423,7 +423,9 @@ def test_integration(plugin: str, db: Session = Depends(get_db)):
     try:
         load_plugin(plugin, cfg).test()
     except Exception as exc:  # noqa: BLE001 - surface any failure as a test result
-        error = str(exc)[:500] or exc.__class__.__name__
+        # Redact credentials (e.g. a token-bearing webhook URL) the exception may
+        # echo, before storing/returning it (#33).
+        error = redact_secrets(str(exc)[:500], cfg) or exc.__class__.__name__
         store.set_integration_test_result(db, plugin=plugin, status="failed", error=error)
         return IntegrationTestResult(ok=False, error=error, tested_at=iso_now())
     store.set_integration_test_result(db, plugin=plugin, status="ok", error=None)

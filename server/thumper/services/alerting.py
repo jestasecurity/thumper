@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from .. import store
 from ..db import SessionLocal
 from ..plugins.registry import load_plugin
+from .integrations import redact_secrets
 
 log = logging.getLogger("thumper.alerting")
 
@@ -24,13 +25,17 @@ def route_alert(db: Session, event: dict) -> None:
         if integration.kind != "alert" or not integration.configured:
             continue
         plugin_name = integration.plugin
+        cfg = json.loads(integration.config_json)
         try:
-            plugin = load_plugin(plugin_name, json.loads(integration.config_json))
+            plugin = load_plugin(plugin_name, cfg)
             plugin.alert(event)
             status, error = "ok", None
         except Exception as exc:  # noqa: BLE001 - best-effort fan-out
-            log.warning("alert plugin %s failed: %s", plugin_name, exc)
-            status, error = "failed", str(exc)
+            # The exception (e.g. an httpx error) can echo the webhook URL, which
+            # embeds the token - redact before it hits the log or the row (#33).
+            error = redact_secrets(str(exc), cfg)
+            log.warning("alert plugin %s failed: %s", plugin_name, error)
+            status = "failed"
         try:
             store.record_delivery(db, alert_id=alert_id, plugin=plugin_name,
                                   status=status, error=error)
