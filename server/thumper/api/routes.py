@@ -685,7 +685,11 @@ async def trigger(request: Request, background: BackgroundTasks,
         pid=int(pid) if pid and str(pid).isdigit() else None,
         os_user=data.get("os_user"),
         event_type=data.get("event_type"),
-        timestamp=data.get("timestamp"),
+        # Store a canonical UTC timestamp, not the agent's raw string: the 24h
+        # count and list ordering compare timestamps as strings, so offset /
+        # fractional-second formats would break them (#31). `ts` is already parsed
+        # and validated above.
+        timestamp=ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         triggered_by=data.get("triggered_by"),
     )
     # Only a pending deployment becomes planted. A failed one stays failed.
