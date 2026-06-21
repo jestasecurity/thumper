@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { EndpointDetail as ED, Tripwire } from "../api";
 import { DeployBadge, EndpointBadge, Topbar, timeAgo } from "../components/ui.tsx";
 
@@ -25,13 +25,15 @@ export default function EndpointDetail() {
   const [removing, setRemoving] = useState<{ tripwireId: string; name: string } | null>(null);
   const [confirm, setConfirm] = useState<"decommission" | "force" | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const nav = useNavigate();
 
-  // A bad/deleted id rejects the promise; show a terminal not-found state instead
-  // of hanging on "Loading…" forever (#21).
   const reload = useCallback(() => {
-    api.getEndpoint(id).then(setEp).catch(() => setNotFound(true));
+    api.getEndpoint(id).then(setEp).catch((e) => {
+      if (e instanceof ApiError && e.status === 404) setNotFound(true);
+      else setLoadErr(e instanceof Error ? e.message : "failed to load endpoint");
+    });
   }, [id]);
 
   useEffect(() => {
@@ -55,6 +57,18 @@ export default function EndpointDetail() {
         <div className="empty">
           This endpoint doesn't exist or was removed.{" "}
           <Link to="/endpoints">← All endpoints</Link>
+        </div>
+      </div>
+    </>
+  );
+  if (loadErr) return (
+    <>
+      <Topbar title="Couldn't load endpoint" />
+      <div className="content">
+        <div className="empty">
+          {loadErr}{" "}
+          <button className="btn" onClick={() => { setLoadErr(null); reload(); }}>Retry</button>
+          {" "}<Link to="/endpoints">← All endpoints</Link>
         </div>
       </div>
     </>

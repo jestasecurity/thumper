@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { TripwireDetail as TD } from "../api";
 import { CopyField, DeployBadge, Modal, TypeTag, Topbar, timeAgo } from "../components/ui.tsx";
 import { Pencil, Trash2 } from "lucide-react";
@@ -18,10 +18,13 @@ export default function TripwireDetail() {
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  // A bad/deleted id rejects the promise; show a terminal not-found state instead
-  // of hanging on "Loading…" forever (#21).
-  const load = () => api.getTripwire(id).then(setTw).catch(() => setNotFound(true));
+  const load = () =>
+    api.getTripwire(id).then(setTw).catch((e) => {
+      if (e instanceof ApiError && e.status === 404) setNotFound(true);
+      else setLoadErr(e instanceof Error ? e.message : "failed to load tripwire");
+    });
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,6 +77,18 @@ export default function TripwireDetail() {
         <div className="empty">
           This tripwire doesn't exist or was deleted.{" "}
           <Link to="/tripwires">← All tripwires</Link>
+        </div>
+      </div>
+    </>
+  );
+  if (loadErr) return (
+    <>
+      <Topbar title="Couldn't load tripwire" />
+      <div className="content">
+        <div className="empty">
+          {loadErr}{" "}
+          <button className="btn" onClick={() => { setLoadErr(null); load(); }}>Retry</button>
+          {" "}<Link to="/tripwires">← All tripwires</Link>
         </div>
       </div>
     </>
