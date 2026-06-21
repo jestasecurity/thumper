@@ -48,11 +48,21 @@ export function TripwireBadge({ deployed, triggered }: { deployed: number; trigg
 }
 
 /** Per-endpoint instance status. */
-export function DeployBadge({ state, triggered }: { state: DeploymentState; triggered?: number }) {
+export function DeployBadge({ state, triggered, endpointStatus }:
+  { state: DeploymentState; triggered?: number; endpointStatus?: EndpointStatus }) {
   if (triggered && triggered > 0) {
     return (
       <span className="badge triggered">
         <span className="dot" /> {triggered} triggered
+      </span>
+    );
+  }
+  // Planted bait on an offline endpoint isn't really "covered" - the agent may no
+  // longer be watching. Mute it (amber) instead of healthy green (#27).
+  if (state === "planted" && endpointStatus && endpointStatus !== "online") {
+    return (
+      <span className="badge pending" title="endpoint offline - bait may not be watched">
+        <span className="dot" /> planted · offline
       </span>
     );
   }

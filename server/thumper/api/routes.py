@@ -99,6 +99,12 @@ def _tripwire_out(db, tripwire, *, deployed_count=None, triggered_count=None) ->
 
 def _deployment_out(db, deployment) -> DeploymentOut:
     endpoint = store.get_endpoint(db, deployment.endpoint_id)
+    if endpoint is None:
+        endpoint_status = "inactive"
+    elif endpoint.decommission_requested_at:
+        endpoint_status = "decommissioning"
+    else:
+        endpoint_status = _endpoint_status(endpoint.last_seen)
     return DeploymentOut(
         id=deployment.id, tripwire_id=deployment.tripwire_id,
         endpoint_id=deployment.endpoint_id,
@@ -106,6 +112,7 @@ def _deployment_out(db, deployment) -> DeploymentOut:
         state=deployment.state, created_at=deployment.created_at,
         last_triggered=deployment.last_triggered,
         triggered_count=store.count_alerts_for_deployment(db, deployment.id),
+        endpoint_status=endpoint_status,
     )
 
 
