@@ -5,6 +5,7 @@ import time
 import httpx
 
 from thumper.plugins.base import AlertPlugin, PluginError
+from thumper.services.ssrf import assert_url_allowed
 
 
 class Plugin(AlertPlugin):
@@ -12,6 +13,7 @@ class Plugin(AlertPlugin):
         url = self.config.get("loki_url")
         if not url:
             raise PluginError("loki: loki_url is required")
+        assert_url_allowed(url)  # SSRF guard (#74)
 
         labels = {"app": "thumper", "tripwire": event.get("tripwire_name", "")}
         for pair in (self.config.get("labels") or "").split(","):

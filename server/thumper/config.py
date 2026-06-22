@@ -3,6 +3,7 @@
 Defaults assume the repo layout (server/thumper/config.py → repo root is two
 parents up) so `uvicorn thumper.main:app` works from a checkout with no setup.
 """
+import ipaddress
 import os
 from pathlib import Path
 from urllib.parse import urlparse
@@ -21,6 +22,24 @@ def insecure_base_url(base_url: str | None = None) -> bool:
     if parsed.scheme != "http":
         return False
     return (parsed.hostname or "").lower() not in _LOOPBACK_HOSTS
+
+
+def _parse_cidrs(raw: str):
+    nets = []
+    for tok in raw.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(tok, strict=False))
+        except ValueError:
+            pass  # ignore malformed entries rather than crash startup
+    return nets
+
+
+# CIDRs/IPs operators explicitly allow as outbound integration targets, so the
+# SSRF guard (#74) doesn't block a legitimately-internal Splunk/Loki/webhook.
+ALLOWED_HOOK_CIDRS = _parse_cidrs(os.environ.get("THUMPER_ALLOWED_HOOK_CIDRS", ""))
 
 # Directory holding the installable plugins (each: plugin.py + manifest.yaml).
 # This is the repo-root `plugins/` tree, NOT server/thumper/plugins/ (which is
@@ -81,6 +100,11 @@ def insecure_default_tokens(enroll: str | None = None, install: str | None = Non
     if install == _DEFAULT_INSTALL_TOKEN:
         flagged.append("THUMPER_INSTALL_TOKEN")
     return flagged
+
+# Secret used to encrypt integration config (plugin credentials) at rest (#24).
+# Any non-empty string; a Fernet key is derived from it. Unset -> config is
+# stored as plaintext (a startup warning fires).
+SECRET_KEY = os.environ.get("THUMPER_SECRET_KEY") or None
 
 # Built static UI (ui/dist) - mounted at / when present (Docker / monolith mode).
 UI_DIST = Path(os.environ.get("THUMPER_UI_DIST", str(REPO_ROOT / "ui" / "dist")))

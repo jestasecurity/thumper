@@ -4,5 +4,5 @@
 // Token generation + the token-type catalog come from the SERVER
 // (api.getTokenTypes / api.previewToken) - the browser never generates
 // honeytokens, because creating one is security-relevant (per-instance HMAC).
-export { httpApi as api } from "./http";
+export { httpApi as api, ApiError } from "./http";
 export * from "./types";

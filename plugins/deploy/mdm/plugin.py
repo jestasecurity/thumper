@@ -13,6 +13,7 @@ that surface - there, copy the install command and distribute it yourself
 """
 from thumper.plugins.base import AgentInstall, DeployPlugin, DeployResult, PluginError
 from thumper.services.jamf import JamfClient, JamfError
+from thumper.services.ssrf import assert_url_allowed
 
 _REQUIRED = ("base_url", "client_id", "client_secret", "smart_group")
 _NAME_PREFIX = "Thumper Agent"
@@ -41,6 +42,7 @@ class Plugin(DeployPlugin):
             raise PluginError(f"MDM plugin missing required config: {', '.join(missing)}")
 
     def _client(self) -> JamfClient:
+        assert_url_allowed(self.config["base_url"])  # SSRF guard (#74)
         return JamfClient(self.config["base_url"], self.config["client_id"],
                           self.config["client_secret"])
 

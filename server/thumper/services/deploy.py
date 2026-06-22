@@ -2,10 +2,9 @@
 plugins. The org's MDM/SSH/etc is the control plane for *which* machines get it;
 each machine that runs the command self-enrolls and pulls its own instance.
 """
-import json
-
 from ..config import BASE_URL, ENROLL_TOKEN, INSTALL_TOKEN
 from ..plugins.base import AgentInstall, PluginError
+from .secrets_crypto import unpack_config
 from ..plugins.registry import load_plugin
 from .. import store
 
@@ -64,7 +63,7 @@ def distribute(conn, tripwire_id: str) -> dict:
         # must not abort the rest or discard their results - report it as failed
         # and carry on.
         try:
-            plugin = load_plugin(integ.plugin, json.loads(integ.config_json))
+            plugin = load_plugin(integ.plugin, unpack_config(integ.config_json))
             res = plugin.deploy(install, [])
             results.append({"plugin": integ.plugin, "state": res.state,
                             "deployed_count": res.deployed_count, "message": res.message})

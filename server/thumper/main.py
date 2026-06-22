@@ -16,6 +16,7 @@ from .api import router
 from .config import (
     UI_DIST, base_url_fail_closed, insecure_base_url, insecure_default_tokens)
 from .db import init_db
+from .services.secrets_crypto import encryption_enabled
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("thumper")
@@ -31,6 +32,10 @@ async def lifespan(app: FastAPI):
             "guess them. Set them to random secrets (env vars) before production.",
             ", ".join(flagged),
         )
+    if not encryption_enabled():
+        log.warning(
+            "SECURITY: integration secrets are stored UNENCRYPTED at rest - set "
+            "THUMPER_SECRET_KEY to encrypt them (#24).")
     # MITM on a plaintext non-loopback BASE_URL is agent/bait fetch + callbacks in
     # cleartext -> a malicious agent served to the endpoint -> root RCE. Severe
     # enough to fail closed: refuse to start unless the operator opts in.

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { TripwireDetail as TD } from "../api";
 import { CopyField, DeployBadge, Modal, TypeTag, Topbar, timeAgo } from "../components/ui.tsx";
 import { Pencil, Trash2 } from "lucide-react";
@@ -17,8 +17,14 @@ export default function TripwireDetail() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
 
-  const load = () => api.getTripwire(id).then(setTw);
+  const load = () =>
+    api.getTripwire(id).then(setTw).catch((e) => {
+      if (e instanceof ApiError && e.status === 404) setNotFound(true);
+      else setLoadErr(e instanceof Error ? e.message : "failed to load tripwire");
+    });
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,6 +70,29 @@ export default function TripwireDetail() {
     }
   }
 
+  if (notFound) return (
+    <>
+      <Topbar title="Tripwire not found" />
+      <div className="content">
+        <div className="empty">
+          This tripwire doesn't exist or was deleted.{" "}
+          <Link to="/tripwires">← All tripwires</Link>
+        </div>
+      </div>
+    </>
+  );
+  if (loadErr) return (
+    <>
+      <Topbar title="Couldn't load tripwire" />
+      <div className="content">
+        <div className="empty">
+          {loadErr}{" "}
+          <button className="btn" onClick={() => { setLoadErr(null); load(); }}>Retry</button>
+          {" "}<Link to="/tripwires">← All tripwires</Link>
+        </div>
+      </div>
+    </>
+  );
   if (!tw) return <div className="content">Loading…</div>;
 
   return (
@@ -147,7 +176,7 @@ export default function TripwireDetail() {
                     <td className="muted">
                       {d.last_triggered ? timeAgo(d.last_triggered) : "-"}
                     </td>
-                    <td><DeployBadge state={d.state} triggered={d.triggered_count} /></td>
+                    <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} /></td>
                   </tr>
                 ))}
               </tbody>

@@ -52,6 +52,7 @@ class DeploymentOut(BaseModel):
     created_at: str
     last_triggered: Optional[str] = None
     triggered_count: int
+    endpoint_status: str = "inactive"   # online | stale | inactive | decommissioning
 
 
 class InstallSpecOut(BaseModel):
