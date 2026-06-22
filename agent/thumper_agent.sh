@@ -392,6 +392,7 @@ heartbeat_loop() {
             kill -USR1 "$MAIN_PID" 2>/dev/null
             return
         fi
+        log "heartbeat succeeded"
     done
 }
 

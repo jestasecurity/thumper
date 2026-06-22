@@ -231,6 +231,20 @@ def test_heartbeat_recovers_token_after_reset(agent):
         "heartbeat did not recover the rotated token from the state file"
 
 
+def test_heartbeat_success_is_logged(agent):
+    keep = agent["keep"]
+    agent["set"]([{"id": "dep_keep", "path": keep}])
+    proc = agent["start"]("--sync-interval", "1", "--heartbeat", "1")
+    assert _wait_until(lambda: Path(keep).exists()), "initial bait not planted"
+
+    before = _StubHandler.heartbeats_ok
+    assert _wait_until(lambda: _StubHandler.heartbeats_ok > before), "no heartbeat sent"
+
+    proc.send_signal(signal.SIGTERM)
+    stdout, stderr = proc.communicate(timeout=5)
+    assert "heartbeat succeeded" in stdout + stderr
+
+
 def test_verify_replants_a_deleted_bait(agent):
     keep = agent["keep"]
     agent["set"]([{"id": "dep_keep", "path": keep}])
