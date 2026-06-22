@@ -25,6 +25,11 @@ def route_alert(db: Session, event: dict) -> None:
         if integration.kind != "alert" or not integration.configured:
             continue
         plugin_name = integration.plugin
+        # MERGE NOTE (#85 encrypt-at-rest): when that lands, this must become
+        # `cfg = unpack_config(integration.config_json)` - json.loads on an
+        # encrypted "fernet:" blob is wrong, and redact_secrets below depends on
+        # cfg holding the real, decrypted values. Whichever of #33/#85 merges
+        # second must reconcile to unpack_config here.
         cfg = json.loads(integration.config_json)
         try:
             plugin = load_plugin(plugin_name, cfg)

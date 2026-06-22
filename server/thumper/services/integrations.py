@@ -33,7 +33,14 @@ def redact_secrets(text: str, config: dict) -> str:
     """Strip credential material from an error string before it's stored/logged.
     Replaces each non-trivial config value (tokens, and full URLs that may embed
     a token in their path/query, e.g. a Slack webhook) with a placeholder (#33).
-    Over-redaction is acceptable - never leak a secret into a delivery error."""
+    Over-redaction is acceptable - never leak a secret into a delivery error.
+
+    Matching is verbatim only, not encoding-aware: it catches the secret exactly
+    as configured (the documented case - httpx echoes the URL as given), but not
+    transformed forms (percent-/JSON-/basic-auth-encoded), where a layer has
+    re-encoded the value. The residual risk is under-redaction of an encoded
+    secret; fine for the current threat model, but worth knowing before relying
+    on this for anything that round-trips the value through another encoder."""
     if not text:
         return text
     # Longest first so a URL containing a token redacts as one unit.
