@@ -92,3 +92,42 @@ def test_inotify_read_fires_callback(tmp_path, fakes):
         proc.send_signal(signal.SIGTERM)
         proc.wait(timeout=10)
         httpd.shutdown()
+
+
+def test_inotify_failure_degrades_to_atime(tmp_path, fakes):
+    # inotifywait that dies immediately (e.g. fs.inotify watch-limit exhaustion)
+    # must NOT leave a silently-dark sensor - the agent logs the failure (stderr
+    # not swallowed) and falls back to the atime poll instead of going blind.
+    _write(fakes / "inotifywait",
+           "#!/bin/sh\necho 'inotifywait: failed to add watch (max_user_watches)' >&2\nexit 1\n")
+    httpd = http.server.HTTPServer(("127.0.0.1", 0), _Stub)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    bait = tmp_path / "bait"
+    _Stub.bait_path = str(bait)
+    _Stub.seen = []
+
+    env = {**os.environ, "PATH": f"{fakes}:{os.environ['PATH']}"}
+    logf = (tmp_path / "agent.out").open("w+")
+    proc = subprocess.Popen(
+        ["sh", str(AGENT), "run", "--server", base, "--enroll-token", "dev-enroll-token",
+         "--tripwire", "tw", "--state-file", str(tmp_path / "state" / "agent.json"),
+         "--heartbeat", "0", "--sync-interval", "0", "--poll", "1"],
+        env=env, stdout=logf, stderr=subprocess.STDOUT, text=True)
+    try:
+        deadline = time.time() + 10
+        text = ""
+        while time.time() < deadline:
+            text = (tmp_path / "agent.out").read_text()
+            if "degrading to atime poll" in text and "atime poll every" in text:
+                break
+            time.sleep(0.2)
+        # The dead sensor is visible (not swallowed) AND we kept some coverage.
+        assert "inotifywait: failed to add watch" in text, "inotifywait stderr was swallowed"
+        assert "inotify watcher exited unexpectedly - degrading to atime poll" in text
+        assert "atime poll every" in text, "did not fall back to the atime poll"
+    finally:
+        proc.send_signal(signal.SIGTERM)
+        proc.wait(timeout=10)
+        httpd.shutdown()
+        logf.close()
