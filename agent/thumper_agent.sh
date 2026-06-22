@@ -25,9 +25,12 @@
 #   • macOS : `fs_usage`, pre-filtered with grep to ONLY our bait paths before
 #             anything else touches it (so we don't process the whole firehose).
 #             Yields the offending process + (looked-up) user. Needs root.
+#   • Linux : `inotifywait` IN_ACCESS on the bait files (reliable, unprivileged).
+#             inotify reports the event but not the accessing process, so alerts
+#             are path-only (no process/pid/user). Needs the inotify-tools package.
 #   • else  : st_atime poll fallback. NOTE: best-effort only - many systems
-#             (notably macOS with relatime-style behavior) update atime lazily or
-#             not at all, so this can miss reads. fs_usage is the real sensor.
+#             update atime lazily or not at all, so this can miss reads. The real
+#             sensors above are preferred; this is the last resort.
 #
 # Example (the shape an MDM/SSH deploy pushes; run as root for fs_usage):
 #   sudo sh thumper_agent.sh run \
@@ -476,6 +479,48 @@ watch_fs_usage() {
     return 0
 }
 
+watch_inotify() {
+    # Linux read sensor: inotify IN_ACCESS fires on read. `%w` is the watched
+    # path. inotify gives no accessing process, so process/pid/user are empty
+    # (path-only alerts, handled like the atime fallback). Works unprivileged.
+    command -v inotifywait >/dev/null 2>&1 || return 1
+    set --
+    i=1
+    while [ "$i" -le "$DEP_COUNT" ]; do
+        eval "p=\$dep_path_$i"
+        set -- "$@" "$p"
+        i=$((i + 1))
+    done
+    log "watching $DEP_COUNT bait file(s) via inotify (path-only; no process/user)"
+    # Do NOT swallow inotifywait's stderr: if it can't start, or dies at runtime
+    # (e.g. fs.inotify.max_user_watches exhaustion), we want that in the log. A
+    # silently-dark sensor looks exactly like "no one touched the bait", which is
+    # the worst possible failure for a tripwire. -q already keeps normal startup
+    # quiet, so only real errors reach the log here.
+    inotifywait -m -q -e access --format '%w' -- "$@" | while read -r path; do
+        idx=""
+        j=1
+        while [ "$j" -le "$DEP_COUNT" ]; do
+            eval "wp=\$dep_path_$j"
+            [ "$wp" = "$path" ] && { idx=$j; break; }
+            j=$((j + 1))
+        done
+        [ -n "$idx" ] || continue
+        now=$(date +%s)
+        eval "last=\$dep_last_$idx"
+        [ $((now - last)) -lt "$DEBOUNCE_SECS" ] && continue
+        eval "dep_last_$idx=\$now"
+        fire "$idx" "access" "" "" "" "$path"
+    done
+    # Reached only when inotifywait exited on its own. If the stop was deliberate
+    # (reconcile/shutdown set the flag), stay quiet - stop_watcher is tearing this
+    # subshell down anyway. Otherwise the real sensor just died: say so loudly and
+    # degrade to the atime poll so we keep *some* coverage rather than going blind.
+    [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+    err "inotify watcher exited unexpectedly - degrading to atime poll"
+    watch_atime
+}
+
 watch_atime() {
     log "fs_usage unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
     i=1
@@ -529,9 +574,12 @@ start_watcher() {  # launch the right sensor in the background; set WATCH_PID
     # not root - so a non-root Mac with passwordless sudo still gets the real
     # sensor. Probe that capability instead of gating on `id -u = 0`, which would
     # silently downgrade such hosts to the lossy atime poll.
+    rm -f "${WATCH_STOP_FLAG:-}" 2>/dev/null || true   # this start is not a stop
     if [ "$(platform)" = "darwin" ] && command -v fs_usage >/dev/null 2>&1 \
        && { [ "$(id -u)" = "0" ] || sudo -n true >/dev/null 2>&1; }; then
         watch_fs_usage &
+    elif [ "$(platform)" = "linux" ] && command -v inotifywait >/dev/null 2>&1; then
+        watch_inotify &
     else
         watch_atime &
     fi
@@ -540,6 +588,7 @@ start_watcher() {  # launch the right sensor in the background; set WATCH_PID
 
 stop_watcher() {  # kill the watcher AND its fs_usage/grep children
     [ -n "${WATCH_PID:-}" ] || return 0
+    : > "${WATCH_STOP_FLAG:-/dev/null}" 2>/dev/null || true  # mark stop deliberate
     # Reap children FIRST. Killing the subshell first makes the kernel reparent
     # fs_usage/grep to PID 1, after which `pkill -P "$WATCH_PID"` matches nothing
     # and leaks a root fs_usage on every reconcile.
@@ -632,6 +681,9 @@ verify_planted() {
 run() {
     STATE_FILE=${STATE_FILE:-$DEFAULT_STATE}
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
+    # Marker that a watcher stop was deliberate (reconcile/shutdown), so a sensor
+    # exiting then can stay quiet instead of crying "sensor died / falling back".
+    WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
