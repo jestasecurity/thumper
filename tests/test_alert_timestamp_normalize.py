@@ -44,3 +44,28 @@ def test_callback_timestamp_is_normalized(client_db, monkeypatch):
 
     stored = db.query(Alert).filter(Alert.deployment_id == "dp_1").first().timestamp
     assert stored == now.strftime("%Y-%m-%dT%H:%M:%SZ"), f"not normalized: {stored!r}"
+
+
+def test_callback_timestamp_offset_is_converted_not_relabeled(client_db, monkeypatch):
+    # A non-zero offset is the case that actually distinguishes correct tz
+    # conversion (.astimezone) from just relabeling the wall-clock as UTC
+    # (.replace(tzinfo=utc), wrong). Same instant as now, written in a +05:00
+    # zone -> wall-clock is 5h ahead; the stored UTC hour must be shifted back.
+    tc, db = client_db
+    db.add(Deployment(id="dp_1", tripwire_id="tw_1", endpoint_id="ep_1", path="/x",
+                      content="b", hmac_secret="s", state="planted",
+                      created_at="2026-01-01T00:00:00Z"))
+    db.commit()
+    monkeypatch.setattr("thumper.api.routes.deliver_alert", lambda e: None)
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    # Same moment as `now`, expressed with a +05:00 offset (wall-clock = now + 5h).
+    offset_ts = (now + timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%S") + "+05:00"
+    body = f"deployment_id=dp_1\nprocess=cat\ntimestamp={offset_ts}".encode()
+    resp = tc.post("/api/trigger", content=body,
+                   headers={"X-Thumper-Signature": sign("s", body)})
+    assert resp.status_code == 200
+
+    stored = db.query(Alert).filter(Alert.deployment_id == "dp_1").first().timestamp
+    # Correct: converted back to now (UTC). A relabel would have stored now+5h.
+    assert stored == now.strftime("%Y-%m-%dT%H:%M:%SZ"), f"offset not converted: {stored!r}"
