@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api import router
-from .config import UI_DIST, insecure_base_url, insecure_default_tokens
+from .config import (
+    UI_DIST, base_url_fail_closed, insecure_base_url, insecure_default_tokens)
 from .db import init_db
 
 logging.basicConfig(level=logging.INFO)
@@ -30,12 +31,23 @@ async def lifespan(app: FastAPI):
             "guess them. Set them to random secrets (env vars) before production.",
             ", ".join(flagged),
         )
+    # MITM on a plaintext non-loopback BASE_URL is agent/bait fetch + callbacks in
+    # cleartext -> a malicious agent served to the endpoint -> root RCE. Severe
+    # enough to fail closed: refuse to start unless the operator opts in.
+    detail = (
+        "THUMPER_BASE_URL is plaintext http:// to a non-loopback host - endpoints "
+        "fetch the agent/bait and post callbacks in cleartext, so a MITM can serve "
+        "a malicious agent (root RCE)")
+    if base_url_fail_closed():
+        raise RuntimeError(
+            f"SECURITY: {detail}. Refusing to start. Use https:// (or a TLS-"
+            "terminating proxy), or set THUMPER_ALLOW_INSECURE_BASE_URL=1 to "
+            "override on a deliberately-insecure network.")
     if insecure_base_url():
         log.warning(
-            "SECURITY: THUMPER_BASE_URL is plaintext http:// to a non-loopback "
-            "host - endpoints fetch the agent/bait and post callbacks in "
-            "cleartext, so a MITM can serve a malicious agent (root RCE). Use "
-            "https:// (or a TLS-terminating proxy) in production.")
+            "SECURITY: %s. Starting anyway because THUMPER_ALLOW_INSECURE_BASE_URL "
+            "is set - use https:// (or a TLS-terminating proxy) in production.",
+            detail)
     yield
 
 

@@ -84,6 +84,7 @@ All options overridable via environment:
 | --- | --- | --- |
 | `THUMPER_DB` | `./thumper.db` | Database URL |
 | `THUMPER_BASE_URL` | `http://localhost:8000` | Server's public URL (must be reachable from endpoints) |
+| `THUMPER_ALLOW_INSECURE_BASE_URL` | _(unset)_ | Opt-in to start with a plaintext non-loopback `BASE_URL` (otherwise the server refuses) |
 | `THUMPER_ENROLL_TOKEN` | `dev-enroll-token` | Shared token for agent enrollment |
 | `THUMPER_INSTALL_TOKEN` | `dev-install-token` | Gates `/install.sh` |
 | `THUMPER_UI_DIST` | `./ui/dist` | Built SPA location |
@@ -98,5 +99,7 @@ server-built script into `sudo sh`, and the agent then fetches bait and posts
 callbacks at URLs the server hands it. So in production `THUMPER_BASE_URL` **must
 be `https://`** (directly or via a TLS-terminating proxy) — over plaintext http a
 network MITM can serve a malicious agent and get root on endpoints. The server
-logs a warning at startup if `BASE_URL` is plaintext http to a non-loopback host
-(`http://localhost` is fine for development).
+**refuses to start** if `BASE_URL` is plaintext http to a non-loopback host,
+unless `THUMPER_ALLOW_INSECURE_BASE_URL=1` is set to opt in (which downgrades it
+to a startup warning, for a deliberately-isolated network). `http://localhost` is
+fine for development and is never flagged.
