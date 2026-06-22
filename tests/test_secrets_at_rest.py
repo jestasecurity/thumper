@@ -50,6 +50,25 @@ def test_encrypted_but_key_missing_raises(monkeypatch):
         unpack_config(stored)
 
 
+def test_list_integrations_survives_undecryptable_row(monkeypatch, client_db):
+    # A row encrypted under a key that's since changed must not 500 the whole
+    # list - the integration is surfaced as unreadable, others still render.
+    tc, db = client_db
+    monkeypatch.setattr(config, "SECRET_KEY", "old-key")
+    assert tc.post("/api/integrations/webhook",
+                   json={"url": "https://hooks.example/x", "signing_secret": "shhh"}
+                   ).status_code == 200
+    monkeypatch.setattr(config, "SECRET_KEY", "rotated-key")  # old row now opaque
+
+    resp = tc.get("/api/integrations")
+    assert resp.status_code == 200                            # not a 500
+    webhook = next(i for i in resp.json() if i["plugin"] == "webhook")
+    assert webhook["configured"] is True
+    assert webhook["config"] == {}                            # secrets not leaked
+    assert webhook["last_test_status"] == "failed"
+    assert "decrypt" in (webhook["last_test_error"] or "").lower()
+
+
 def test_save_integration_encrypts_in_db(monkeypatch, client_db):
     monkeypatch.setattr(config, "SECRET_KEY", "k-1")
     tc, db = client_db

@@ -9,6 +9,7 @@ Two distinct contracts live here:
 """
 import hmac
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
@@ -46,11 +47,12 @@ from ..services.alerting import deliver_alert
 from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
 from ..services.integrations import mask_config, merge_config, saved_config
-from ..services.secrets_crypto import unpack_config
+from ..services.secrets_crypto import ConfigDecryptError, unpack_config
 from ..services.signing import verify
 from ..tokens import TOKEN_TYPES
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger("thumper.api")
 
 _STALE_WINDOW = timedelta(minutes=15)
 _INACTIVE_WINDOW = timedelta(hours=12)
@@ -384,13 +386,21 @@ def list_integrations(db: Session = Depends(get_db)):
     out = []
     for manifest in public_manifests():
         rec = saved.get(manifest["name"])
-        config = mask_config(manifest, unpack_config(rec.config_json)) if rec else {}
+        config, unreadable = {}, None
+        if rec:
+            try:
+                config = mask_config(manifest, unpack_config(rec.config_json))
+            except ConfigDecryptError as exc:
+                # One row encrypted under a changed/missing key must not 500 the
+                # whole list - surface just that integration as unreadable.
+                log.warning("integration %s config unreadable: %s", rec.plugin, exc)
+                unreadable = str(exc)
         out.append(IntegrationOut(
             plugin=manifest["name"], kind=manifest["kind"],
             configured=bool(rec and rec.configured), config=config,
-            last_test_status=rec.last_test_status if rec else None,
+            last_test_status="failed" if unreadable else (rec.last_test_status if rec else None),
             last_test_at=rec.last_test_at if rec else None,
-            last_test_error=rec.last_test_error if rec else None,
+            last_test_error=unreadable or (rec.last_test_error if rec else None),
         ))
     return out
 
