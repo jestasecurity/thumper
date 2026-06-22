@@ -53,6 +53,9 @@ def plugin_module(monkeypatch):
     module = load_plugin_module()
     FakeClient.instances = []
     monkeypatch.setattr(module, "JamfClient", FakeClient)
+    # base_url here is a non-resolvable stub ("https://jss"); neutralize the SSRF
+    # guard so these orchestration tests don't do DNS (covered in test_ssrf.py).
+    monkeypatch.setattr(module, "assert_url_allowed", lambda url: None)
     return module
 
 

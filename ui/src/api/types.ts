@@ -49,6 +49,7 @@ export interface Deployment {
   created_at: string;
   last_triggered: string | null;
   triggered_count: number;
+  endpoint_status: EndpointStatus;
 }
 
 /** What the operator distributes (via MDM/SSH/etc) to put this tripwire on

@@ -77,3 +77,16 @@ def test_enroll_with_two_tripwires_materializes_two_deployments(client_db):
     assert resp.status_code == 200
     eid = [ln for ln in resp.text.splitlines() if ln.startswith("endpoint_id=")][0].split("=", 1)[1]
     assert len(store.list_deployments_for_endpoint(db, eid)) == 2
+
+
+def test_install_script_autoinstalls_inotify_tools(client_db):
+    """The bootstrap installer should ensure inotify-tools on Linux across the
+    main package managers, so read detection works without a manual step (#3/#7)."""
+    tc, _ = client_db
+    resp = tc.get("/api/install.sh", params={"token": "dev-install-token", "tripwire": "tw_x"})
+    assert resp.status_code == 200
+    s = resp.text
+    assert "inotify-tools" in s
+    assert 'uname -s' in s          # gated to Linux
+    for pm in ("apt-get", "dnf", "yum", "zypper", "apk", "pacman"):
+        assert pm in s, f"missing package manager {pm}"

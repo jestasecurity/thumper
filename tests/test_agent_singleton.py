@@ -94,15 +94,18 @@ def agent(tmp_path):
         httpd.shutdown()
 
 
-def test_second_agent_exits_without_enrolling(agent):
-    """A live agent holds the lock; a second start exits 0 and never enrolls."""
+def test_second_agent_registers_but_does_not_watch(agent):
+    """A live agent holds the lock; a second start REGISTERS its tripwires with the
+    server (so the running agent live-syncs them, #12) but does NOT become a second
+    watcher or take the lock."""
     holder = agent["fake_holder"]("thumper_agent.sh")
     agent["write_lock"](holder)
 
     result = agent["run"]()
 
     assert result.returncode == 0
-    assert "/api/enroll" not in _StubHandler.seen, "second agent enrolled - not a singleton"
+    assert "/api/enroll" in _StubHandler.seen, "second start should register its tripwires"
+    assert "/api/agent/deployments" not in _StubHandler.seen, "second start must not become a watcher"
     assert "already running" in (result.stdout + result.stderr).lower()
     # the live holder's lock is untouched
     assert (agent["lock_dir"] / "pid").read_text().strip() == str(holder)
@@ -144,7 +147,9 @@ def test_initializing_holder_is_not_reclaimed(agent):
     result = agent["run"]()
 
     assert result.returncode == 0
-    assert "/api/enroll" not in _StubHandler.seen, "reclaimed an initializing holder's lock"
+    # Deferred to the initializing holder (didn't steal its lock); it registers
+    # rather than reclaiming - the lock still belongs to the holder.
+    assert "/api/agent/deployments" not in _StubHandler.seen, "reclaimed an initializing holder's lock"
     assert "already running" in (result.stdout + result.stderr).lower()
     assert (agent["lock_dir"] / "pid").read_text().strip() == str(holder)
 

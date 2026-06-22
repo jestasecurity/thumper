@@ -9,6 +9,7 @@ Two distinct contracts live here:
 """
 import hmac
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
@@ -46,10 +47,13 @@ from ..services.alerting import deliver_alert
 from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
 from ..services.integrations import mask_config, merge_config, redact_secrets, saved_config
+from ..services.secrets_crypto import ConfigDecryptError, unpack_config
 from ..services.signing import verify
+from ..services.ssrf import SsrfError, assert_config_urls_allowed
 from ..tokens import TOKEN_TYPES
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger("thumper.api")
 
 _STALE_WINDOW = timedelta(minutes=15)
 _INACTIVE_WINDOW = timedelta(hours=12)
@@ -60,6 +64,25 @@ def _token_eq(provided: str, expected: str) -> bool:
     """Constant-time token comparison (avoids a timing side-channel on the shared
     enroll/install tokens)."""
     return hmac.compare_digest(provided, expected)
+
+
+def _validate_bait_path(path: str) -> str:
+    """A bait path is planted by the (root) agent, so a malformed one is a write
+    primitive. Require an absolute or home-rooted path and reject traversal. This
+    blocks `..` and relative paths injected via the (currently open) create API;
+    constraining which absolute roots are allowed is a separate policy decision."""
+    p = (path or "").strip()
+    if not p:
+        raise HTTPException(400, "path is required")
+    if ".." in p.split("/"):
+        raise HTTPException(400, "path must not contain '..'")
+    # Accept only `~/` (current user's home), NOT `~user/`: the agent's expand_path
+    # expands only `~/`, so a `~postgres/.pgpass` would pass here but be used
+    # literally by the root agent (`mkdir -p ~postgres` under CWD) - bait lands in
+    # a junk dir while the dashboard reports it deployed.
+    if not (p.startswith("/") or p == "~" or p.startswith("~/")):
+        raise HTTPException(400, "path must be absolute (/...) or home-rooted (~/...)")
+    return p
 
 
 def _parse_ts(timestamp: str | None):
@@ -83,6 +106,17 @@ def _endpoint_status(last_seen: str | None) -> str:
     return "inactive"
 
 
+def _endpoint_status_full(endpoint) -> str:
+    """Liveness status for an endpoint, including the decommissioning override and
+    the missing-endpoint case. Single source of truth so _endpoint_out and
+    _deployment_out can't drift if a new status is ever added."""
+    if endpoint is None:
+        return "inactive"
+    if endpoint.decommission_requested_at:
+        return "decommissioning"
+    return _endpoint_status(endpoint.last_seen)
+
+
 def _tripwire_out(db, tripwire, *, deployed_count=None, triggered_count=None) -> TripwireOut:
     if deployed_count is None:
         deployed_count = len(store.list_deployments_for_tripwire(db, tripwire.id))
@@ -99,6 +133,7 @@ def _tripwire_out(db, tripwire, *, deployed_count=None, triggered_count=None) ->
 
 def _deployment_out(db, deployment) -> DeploymentOut:
     endpoint = store.get_endpoint(db, deployment.endpoint_id)
+    endpoint_status = _endpoint_status_full(endpoint)
     return DeploymentOut(
         id=deployment.id, tripwire_id=deployment.tripwire_id,
         endpoint_id=deployment.endpoint_id,
@@ -106,6 +141,7 @@ def _deployment_out(db, deployment) -> DeploymentOut:
         state=deployment.state, created_at=deployment.created_at,
         last_triggered=deployment.last_triggered,
         triggered_count=store.count_alerts_for_deployment(db, deployment.id),
+        endpoint_status=endpoint_status,
     )
 
 
@@ -118,8 +154,7 @@ def _endpoint_out(db, endpoint, *, deployment_count=None, triggered_count=None) 
     return EndpointOut(
         id=endpoint_id, hostname=endpoint.hostname, platform=endpoint.platform,
         enrolled_at=endpoint.enrolled_at, last_seen=endpoint.last_seen,
-        status="decommissioning" if endpoint.decommission_requested_at
-        else _endpoint_status(endpoint.last_seen),
+        status=_endpoint_status_full(endpoint),
         deployment_count=deployment_count,
         triggered_count=triggered_count,
     )
@@ -170,6 +205,7 @@ def list_tripwires(db: Session = Depends(get_db)):
 
 @router.post("/tripwires", response_model=TripwireOut)
 def create_tripwire(body: CreateTripwireIn, db: Session = Depends(get_db)):
+    path = _validate_bait_path(body.path)
     if body.source == "custom" and not body.custom_content:
         raise HTTPException(400, "custom source requires custom_content")
     token = body.token or render_content(
@@ -177,7 +213,7 @@ def create_tripwire(body: CreateTripwireIn, db: Session = Depends(get_db)):
         custom_content=body.custom_content,
     )
     tripwire = store.create_tripwire(
-        db, name=body.name, token_type=body.token_type, path=body.path,
+        db, name=body.name, token_type=body.token_type, path=path,
         source=body.source, custom_content=body.custom_content, token=token,
     )
     return _tripwire_out(db, tripwire)
@@ -383,13 +419,21 @@ def list_integrations(db: Session = Depends(get_db)):
     out = []
     for manifest in public_manifests():
         rec = saved.get(manifest["name"])
-        config = mask_config(manifest, json.loads(rec.config_json)) if rec else {}
+        config, unreadable = {}, None
+        if rec:
+            try:
+                config = mask_config(manifest, unpack_config(rec.config_json))
+            except ConfigDecryptError as exc:
+                # One row encrypted under a changed/missing key must not 500 the
+                # whole list - surface just that integration as unreadable.
+                log.warning("integration %s config unreadable: %s", rec.plugin, exc)
+                unreadable = str(exc)
         out.append(IntegrationOut(
             plugin=manifest["name"], kind=manifest["kind"],
             configured=bool(rec and rec.configured), config=config,
-            last_test_status=rec.last_test_status if rec else None,
+            last_test_status="failed" if unreadable else (rec.last_test_status if rec else None),
             last_test_at=rec.last_test_at if rec else None,
-            last_test_error=rec.last_test_error if rec else None,
+            last_test_error=unreadable or (rec.last_test_error if rec else None),
         ))
     return out
 
@@ -400,6 +444,10 @@ def save_integration(plugin: str, config: dict, db: Session = Depends(get_db)):
     if manifest is None:
         raise HTTPException(404, "unknown plugin")
     merged = merge_config(saved_config(db, plugin), config)
+    try:
+        assert_config_urls_allowed(plugin, merged)  # SSRF guard (#74)
+    except SsrfError as exc:
+        raise HTTPException(400, str(exc))
     store.upsert_integration(db, plugin=plugin, kind=manifest["kind"], config=merged)
     return IntegrationOut(plugin=plugin, kind=manifest["kind"], configured=True,
                           config=mask_config(manifest, merged))
@@ -490,6 +538,18 @@ DIR="${{THUMPER_DIR:-/usr/local/thumper}}"
 for tool in curl openssl; do
   command -v "$tool" >/dev/null 2>&1 || {{ echo "thumper: $tool is required"; exit 1; }}
 done
+# Linux read detection prefers inotify; ensure inotify-tools (every main distro
+# packages it, none preinstall it). Best-effort - the agent falls back to atime
+# polling if this can't run (offline / locked-down host).
+if [ "$(uname -s)" = "Linux" ] && ! command -v inotifywait >/dev/null 2>&1; then
+  ( if command -v apt-get >/dev/null 2>&1; then apt-get update -qq && apt-get install -y inotify-tools;
+    elif command -v dnf >/dev/null 2>&1; then dnf install -y inotify-tools;
+    elif command -v yum >/dev/null 2>&1; then yum install -y inotify-tools;
+    elif command -v zypper >/dev/null 2>&1; then zypper -n install inotify-tools;
+    elif command -v apk >/dev/null 2>&1; then apk add inotify-tools;
+    elif command -v pacman >/dev/null 2>&1; then pacman -Sy --noconfirm inotify-tools;
+    fi ) >/dev/null 2>&1 || echo "thumper: could not install inotify-tools; using atime fallback"
+fi
 mkdir -p "$DIR"
 curl -fsSL "$SERVER/api/agent/thumper_agent.sh" -o "$DIR/thumper_agent.sh"
 chmod +x "$DIR/thumper_agent.sh"
@@ -687,7 +747,11 @@ async def trigger(request: Request, background: BackgroundTasks,
         pid=int(pid) if pid and str(pid).isdigit() else None,
         os_user=data.get("os_user"),
         event_type=data.get("event_type"),
-        timestamp=data.get("timestamp"),
+        # Store a canonical UTC timestamp, not the agent's raw string: the 24h
+        # count and list ordering compare timestamps as strings, so offset /
+        # fractional-second formats would break them (#31). `ts` is already parsed
+        # and validated above.
+        timestamp=ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         triggered_by=data.get("triggered_by"),
     )
     # Only a pending deployment becomes planted. A failed one stays failed.

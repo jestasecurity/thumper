@@ -6,7 +6,6 @@ of silently logged.
 The trigger endpoint schedules `deliver_alert` as a background task; it owns its
 own session because the request-scoped one is closed once the response is sent.
 """
-import json
 import logging
 
 from sqlalchemy.orm import Session
@@ -15,6 +14,7 @@ from .. import store
 from ..db import SessionLocal
 from ..plugins.registry import load_plugin
 from .integrations import redact_secrets
+from .secrets_crypto import unpack_config
 
 log = logging.getLogger("thumper.alerting")
 
@@ -25,12 +25,9 @@ def route_alert(db: Session, event: dict) -> None:
         if integration.kind != "alert" or not integration.configured:
             continue
         plugin_name = integration.plugin
-        # MERGE NOTE (#85 encrypt-at-rest): when that lands, this must become
-        # `cfg = unpack_config(integration.config_json)` - json.loads on an
-        # encrypted "fernet:" blob is wrong, and redact_secrets below depends on
-        # cfg holding the real, decrypted values. Whichever of #33/#85 merges
-        # second must reconcile to unpack_config here.
-        cfg = json.loads(integration.config_json)
+        # Decrypt at rest (#24) before use - and so redact_secrets below has the
+        # real config values to strip from any error string (#33).
+        cfg = unpack_config(integration.config_json)
         try:
             plugin = load_plugin(plugin_name, cfg)
             plugin.alert(event)
