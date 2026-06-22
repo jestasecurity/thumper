@@ -6,15 +6,15 @@ of silently logged.
 The trigger endpoint schedules `deliver_alert` as a background task; it owns its
 own session because the request-scoped one is closed once the response is sent.
 """
-import json
 import logging
 
 from sqlalchemy.orm import Session
 
 from .. import store
 from ..db import SessionLocal
-from .secrets_crypto import unpack_config
 from ..plugins.registry import load_plugin
+from .integrations import redact_secrets
+from .secrets_crypto import unpack_config
 
 log = logging.getLogger("thumper.alerting")
 
@@ -25,13 +25,19 @@ def route_alert(db: Session, event: dict) -> None:
         if integration.kind != "alert" or not integration.configured:
             continue
         plugin_name = integration.plugin
+        # Decrypt at rest (#24) before use - and so redact_secrets below has the
+        # real config values to strip from any error string (#33).
+        cfg = unpack_config(integration.config_json)
         try:
-            plugin = load_plugin(plugin_name, unpack_config(integration.config_json))
+            plugin = load_plugin(plugin_name, cfg)
             plugin.alert(event)
             status, error = "ok", None
         except Exception as exc:  # noqa: BLE001 - best-effort fan-out
-            log.warning("alert plugin %s failed: %s", plugin_name, exc)
-            status, error = "failed", str(exc)
+            # The exception (e.g. an httpx error) can echo the webhook URL, which
+            # embeds the token - redact before it hits the log or the row (#33).
+            error = redact_secrets(str(exc), cfg)
+            log.warning("alert plugin %s failed: %s", plugin_name, error)
+            status = "failed"
         try:
             store.record_delivery(db, alert_id=alert_id, plugin=plugin_name,
                                   status=status, error=error)

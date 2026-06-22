@@ -56,7 +56,7 @@ def test_list_integrations_survives_undecryptable_row(monkeypatch, client_db):
     tc, db = client_db
     monkeypatch.setattr(config, "SECRET_KEY", "old-key")
     assert tc.post("/api/integrations/webhook",
-                   json={"url": "https://hooks.example/x", "signing_secret": "shhh"}
+                   json={"url": "http://127.0.0.1/x", "signing_secret": "shhh"}
                    ).status_code == 200
     monkeypatch.setattr(config, "SECRET_KEY", "rotated-key")  # old row now opaque
 
@@ -73,7 +73,7 @@ def test_save_integration_encrypts_in_db(monkeypatch, client_db):
     monkeypatch.setattr(config, "SECRET_KEY", "k-1")
     tc, db = client_db
     resp = tc.post("/api/integrations/webhook",
-                   json={"url": "https://hooks.example/x", "signing_secret": "shhh"})
+                   json={"url": "http://127.0.0.1/x", "signing_secret": "shhh"})
     assert resp.status_code == 200
     from thumper.db import Integration
     row = db.query(Integration).filter(Integration.plugin == "webhook").first()
