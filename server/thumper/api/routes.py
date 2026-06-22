@@ -513,10 +513,18 @@ curl -fsSL "$SERVER/api/agent/thumper_agent.sh" -o "$DIR/thumper_agent.sh"
 chmod +x "$DIR/thumper_agent.sh"
 # Start watching in the background. Runs as root (for fs_usage); the agent plants
 # bait in the real user's home and chowns it to that user.
-nohup sh "$DIR/thumper_agent.sh" run \\
-  --server "$SERVER" --enroll-token "$ENROLL_TOKEN" {tw_args} \\
+nohup sh "$DIR/thumper_agent.sh" run \
+  --server "$SERVER" --enroll-token "$ENROLL_TOKEN" {tw_args} \
   --heartbeat 60 --state-file "$DIR/agent.json" >"$DIR/agent.log" 2>&1 &
-echo "thumper: agent installed in $DIR and watching (logs: $DIR/agent.log)"
+# The agent may exit immediately if another instance is already running.
+# Wait briefly and verify it is alive before reporting success.
+sleep 1
+if kill -0 $! 2>/dev/null; then
+  echo "thumper: agent installed in $DIR and watching (logs: $DIR/agent.log)"
+else
+  echo "thumper: agent exited immediately; check $DIR/agent.log" >&2
+  exit 1
+fi
 """
     return PlainTextResponse(script, media_type="text/x-shellscript")
 
