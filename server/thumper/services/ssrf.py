@@ -1,22 +1,23 @@
 """SSRF guard for operator-configured outbound integration URLs (#74).
 
 Integration targets (webhook / loki / splunk / jamf) are fetched server-side, so
-an attacker-set URL could reach internal services or cloud metadata. Block
-private / loopback / link-local destinations by default; operators opt-in real
-internal hosts via THUMPER_ALLOWED_HOOK_CIDRS. The host is resolved and every
-resolved IP is checked, so a hostname pointing at an internal address is caught.
+an attacker-set URL could reach internal services or cloud metadata. Block any
+non-globally-routable destination by default (private / loopback / link-local /
+CGNAT / reserved); operators opt-in real internal hosts via
+THUMPER_ALLOWED_HOOK_CIDRS. The host is resolved and every resolved IP is
+checked, so a hostname pointing at an internal address is caught.
+
+Known gap (TOCTOU / DNS rebinding): we validate the IPs resolved here, but httpx
+re-resolves the host when it sends the request, so a host that returns a public
+IP now and an internal IP a moment later still gets through. Acceptable for
+operator-set URLs as v1; the real fix is to pin a validated IP for the actual
+connection. Tracked alongside the SSH-tunnel follow-up.
 """
 import ipaddress
 import socket
 from urllib.parse import urlparse
 
 from ..config import ALLOWED_HOOK_CIDRS
-
-_BLOCKED = [ipaddress.ip_network(c) for c in (
-    "0.0.0.0/8", "10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16",
-    "172.16.0.0/12", "192.168.0.0/16",
-    "::1/128", "fc00::/7", "fe80::/10",
-)]
 
 # Which config fields hold an outbound URL, per plugin (for save-time validation).
 INTEGRATION_URL_FIELDS = {
@@ -33,9 +34,18 @@ class SsrfError(Exception):
 
 def _ip_blocked(ip: str, allowlist) -> bool:
     addr = ipaddress.ip_address(ip)
+    # Unwrap IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) so the embedded IPv4 is
+    # classified directly. is_global only handles these correctly on CPython
+    # 3.12.4+, and unwrapping also lets IPv4 allowlist CIDRs match.
+    mapped = getattr(addr, "ipv4_mapped", None)
+    if mapped is not None:
+        addr = mapped
     if any(addr in net for net in allowlist):
         return False
-    return any(addr in net for net in _BLOCKED)
+    # Block anything not globally routable: covers private, loopback,
+    # link-local, CGNAT (100.64/10), reserved (240/4) and unspecified ranges
+    # that a hand-maintained net list is easy to leave incomplete.
+    return not addr.is_global
 
 
 def assert_url_allowed(url: str, *, allowlist=None) -> None:

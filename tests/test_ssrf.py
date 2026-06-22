@@ -14,10 +14,24 @@ from thumper.services.ssrf import SsrfError, assert_url_allowed
     "http://192.168.1.1/x",
     "http://172.16.0.9/x",
     "http://[::1]/x",
+    "http://100.64.0.1/x",          # CGNAT (100.64/10) - missed by a basic list
+    "http://240.0.0.1/x",           # reserved (240/4)
+    "http://[::ffff:127.0.0.1]/x",  # IPv4-mapped IPv6 loopback
+    "http://0.0.0.0/x",             # unspecified
 ])
 def test_blocks_internal_targets(url):
     with pytest.raises(SsrfError):
         assert_url_allowed(url, allowlist=[])
+
+
+def test_blocks_ipv4_mapped_metadata(monkeypatch):
+    # A host resolving to an IPv4-mapped IPv6 form of the metadata IP must
+    # still be blocked, regardless of CPython's version-dependent is_global.
+    def fake_getaddrinfo(host, port, *a, **k):
+        return [(10, 1, 6, "", ("::ffff:169.254.169.254", port or 80, 0, 0))]
+    monkeypatch.setattr(ssrf.socket, "getaddrinfo", fake_getaddrinfo)
+    with pytest.raises(SsrfError):
+        assert_url_allowed("http://evil.example.com/x", allowlist=[])
 
 
 @pytest.mark.parametrize("url", ["http://8.8.8.8/hook", "https://1.1.1.1/x"])
