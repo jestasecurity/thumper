@@ -556,14 +556,37 @@ plant_all() {  # plant every current deployment; sets `planted`
     done
 }
 
+# attribute <fifo> : best-effort set of globals process/pid/os_user. Real
+# implementation lands in the attribution task; default is "unknown".
+attribute() { pid=""; process=""; os_user=""; return 0; }
+
+serve_fifo() {  # serve_fifo <i> - serve one bait FIFO forever; a read = a hit
+    eval "fifo=\$dep_path_$1 id=\$dep_id_$1"
+    cf=$(cache_path "$id")
+    trap '' PIPE                                    # a reader closing early must not kill us
+    while [ -p "$fifo" ]; do
+        exec 3>"$fifo" || break                     # open(O_WRONLY) BLOCKS until a reader opens
+        attribute "$fifo"                           # reader is parked in read(); grab it before we write
+        cat "$cf" >&3 2>/dev/null || true           # serve bait into the held fd (ignore EPIPE)
+        exec 3>&-                                    # close -> reader gets EOF
+        now=$(date +%s); eval "last=\${dep_last_$1:-0}"
+        if [ $((now - last)) -ge "$DEBOUNCE_SECS" ]; then
+            eval "dep_last_$1=\$now"
+            is_noise "$process" || fire "$1" open "$process" "$pid" "$os_user" "$fifo"
+        fi
+    done
+}
+
+watch_fifo() {  # supervisor: one serve_fifo per bait, wait on them
+    log "watching $DEP_COUNT bait file(s) via FIFO"
+    i=1
+    while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & i=$((i + 1)); done
+    wait
+}
+
 start_watcher() {  # launch the right sensor in the background; set WATCH_PID
-    # fs_usage needs root, but watch_fs_usage runs it under `sudo -n` when we are
-    # not root - so a non-root Mac with passwordless sudo still gets the real
-    # sensor. Probe that capability instead of gating on `id -u = 0`, which would
-    # silently downgrade such hosts to the lossy atime poll.
-    if [ "$(platform)" = "darwin" ] && command -v fs_usage >/dev/null 2>&1 \
-       && { [ "$(id -u)" = "0" ] || sudo -n true >/dev/null 2>&1; }; then
-        watch_fs_usage &
+    if [ "$FIFO_MODE" = 1 ]; then
+        watch_fifo &
     else
         watch_atime &
     fi

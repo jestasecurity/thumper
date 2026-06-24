@@ -1,7 +1,7 @@
 """FIFO bait sensor (#100): bait is planted as a named pipe; a read of it
 unblocks the agent's write and fires a callback. Driven against a stub server,
 like test_agent_live_sync.py."""
-import http.server, subprocess, threading, os, stat
+import http.server, subprocess, threading, os, stat, time
 from pathlib import Path
 import pytest
 
@@ -53,3 +53,26 @@ def test_plant_creates_a_fifo_and_caches_content(server, tmp_path):
     assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode), "bait is not a FIFO"
     cache = tmp_path / "bait" / "dep_1"
     assert cache.read_text() == BAIT_BODY, "bait content not cached"
+
+def _wait(pred, timeout=12):
+    end=time.time()+timeout
+    while time.time()<end:
+        if pred(): return True
+        time.sleep(0.2)
+    return False
+
+def test_reading_the_fifo_fires_a_callback(server, tmp_path):
+    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
+    p = subprocess.Popen(
+        ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{server.server_port}",
+         "--enroll-token","e","--tripwire","tw_1","--state-file",str(tmp_path/"agent.json"),
+         "--heartbeat","0","--sync-interval","0"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert _wait(lambda: bait.exists() and stat.S_ISFIFO(bait.stat().st_mode)), "no FIFO planted"
+        time.sleep(0.5)
+        got = Path(bait).read_text()                      # the "attacker" read
+        assert got == BAIT_BODY, f"served wrong content: {got!r}"
+        assert _wait(lambda: any("event_type=open" in c for c in Stub.callbacks)), "no callback fired"
+    finally:
+        p.terminate(); p.wait(timeout=5)
