@@ -14,7 +14,8 @@ def _install_command(tripwire_ids: list[str]) -> str:
     # Self-bootstrapping: downloads the agent from the server and starts it
     # watching. Works pasted on an endpoint or pushed via MDM/SSH. We download
     # THEN `sudo sh <file>` (not `curl | sudo sh`) so sudo keeps the terminal for
-    # its password prompt. sudo because macOS fs_usage read-detection needs root.
+    # its password prompt. sudo is only needed when planting in system paths like
+    # /etc/ssh — read detection (FIFO sensor) is unprivileged.
     # The install token gates /api/install.sh (it embeds the enroll token), so we
     # pass it here - this command is generated server-side, never exposed publicly.
     # One `tripwire=` param per tripwire; the agent enrolls for the whole set and
