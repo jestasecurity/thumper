@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 # The endpoint agent is a standalone Bash script (agent/thumper_agent.sh) using
 # only curl + openssl - it has no Python dependencies of its own.
-postgres = ["psycopg[binary]>=3.1"]
+postgres = ["psycopg[binary]>=3.3.4"]
 mysql = ["pymysql>=1.1"]
 dev = ["pytest>=8.0"]
 
