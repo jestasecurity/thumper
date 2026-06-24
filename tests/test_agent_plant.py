@@ -144,6 +144,10 @@ def test_refreshes_its_own_bait(agent):
     (path,) = configure("bait_target")
 
     assert run().returncode == 0
+    # In FIFO mode the planted path is a named pipe; open() on a FIFO blocks
+    # until a writer appears, so write_text() would deadlock. Remove the pipe
+    # first, then place a regular file to simulate stale/rotated bait.
+    Path(path).unlink()
     Path(path).write_text("stale-bait")  # simulate server-side rotation
     assert run().returncode == 0
     assert stat.S_ISFIFO(Path(path).stat().st_mode), "bait not planted as FIFO"

@@ -54,6 +54,7 @@ LAST_RESYNC=0
 # serving loop can re-serve it on every read.
 FIFO_MODE=0
 BAITCACHE=""
+REPLANTED=0
 probe_fifo_mode() {
     command -v mkfifo >/dev/null 2>&1 || { FIFO_MODE=0; return; }
     _probe="$(dirname "$STATE_FILE")/.fifoprobe.$$"
@@ -660,6 +661,7 @@ verify_planted() {
             if [ "$a" -lt "$REPLANT_MAX" ]; then
                 if plant "$i"; then
                     log "re-planted missing bait $vid"
+                    REPLANTED=1
                 else
                     eval "heal_$vid=$((a + 1))"
                     log "re-plant failed for $vid ($((a + 1))/$REPLANT_MAX)"
@@ -754,7 +756,13 @@ run() {
             reconcile "$_old"
             start_watcher
         fi
+        REPLANTED=0
         verify_planted   # every cycle, even when the set did not change
+        if [ "$FIFO_MODE" = 1 ] && [ "$REPLANTED" = 1 ]; then
+            log "re-planted bait - restarting FIFO watcher to serve it"
+            stop_watcher
+            start_watcher
+        fi
     done
 }
 
