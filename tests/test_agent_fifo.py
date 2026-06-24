@@ -61,6 +61,26 @@ def _wait(pred, timeout=12):
         time.sleep(0.2)
     return False
 
+def test_callback_includes_reader_pid_and_user(server, tmp_path):
+    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
+    p = subprocess.Popen(
+        ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{server.server_port}",
+         "--enroll-token","e","--tripwire","tw_1","--state-file",str(tmp_path/"agent.json"),
+         "--heartbeat","0","--sync-interval","0"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert _wait(lambda: bait.exists() and stat.S_ISFIFO(bait.stat().st_mode))
+        time.sleep(0.5)
+        Path(bait).read_text()
+        assert _wait(lambda: Stub.callbacks)
+        body = Stub.callbacks[-1]
+        assert "pid=" in body and "os_user=" in body
+        pid_line = [l for l in body.splitlines() if l.startswith("pid=")][0]
+        user_line = [l for l in body.splitlines() if l.startswith("os_user=")][0]
+        assert pid_line != "pid=" and user_line != "os_user=", f"reader not attributed: {body!r}"
+    finally:
+        p.terminate(); p.wait(timeout=5)
+
 def test_reading_the_fifo_fires_a_callback(server, tmp_path):
     bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
     p = subprocess.Popen(

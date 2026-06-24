@@ -556,9 +556,22 @@ plant_all() {  # plant every current deployment; sets `planted`
     done
 }
 
-# attribute <fifo> : best-effort set of globals process/pid/os_user. Real
-# implementation lands in the attribution task; default is "unknown".
-attribute() { pid=""; process=""; os_user=""; return 0; }
+# attribute <fifo> : best-effort set globals pid/process/os_user to the reader's.
+# lsof <path> does NOT report FIFO openers on macOS; full-scan and match by inode.
+attribute() {  # attribute <fifo> ; best-effort set globals pid/process/os_user
+    pid=""; process=""; os_user=""
+    command -v lsof >/dev/null 2>&1 || return 0
+    ino=$(stat -f %i "$1" 2>/dev/null || stat -c %i "$1" 2>/dev/null) || return 0
+    [ -n "$ino" ] || return 0
+    # Full scan: pick the process whose fd on THIS inode is open for READ (4r) and
+    # is not our serve subshell ($$). Inode matched as a standalone field so a
+    # blank DEVICE column can't shift parsing.
+    pid=$(lsof -nP 2>/dev/null | awk -v ino="$ino" -v me="$$" '
+        index($0,"FIFO") && $2!=me && $4 ~ /r$/ && $0 ~ ("(^|[ \t])" ino "([ \t]|$)") { print $2; exit }')
+    [ -n "$pid" ] || { pid=""; return 0; }
+    process=$(ps -o comm= -p "$pid" 2>/dev/null | sed 's#.*/##' | tr -d ' ')
+    os_user=$(user_of_pid "$pid")
+}
 
 serve_fifo() {  # serve_fifo <i> - serve one bait FIFO forever; a read = a hit
     eval "fifo=\$dep_path_$1 id=\$dep_id_$1"
