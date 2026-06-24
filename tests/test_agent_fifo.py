@@ -109,11 +109,13 @@ def test_clean_exit_removes_fifos(server, tmp_path):
     assert not bait.exists(), "FIFO left behind after clean exit"
 
 def test_startup_sweeps_a_stale_fifo(server, tmp_path):
-    # Simulate a prior hard-killed run: a manifest naming a leftover FIFO.
-    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
-    os.mkfifo(bait)
-    (tmp_path / "planted.list").write_text(str(bait) + "\n")
+    # An orphan FIFO from a prior run: listed in the manifest but NOT a current
+    # deployment, so ONLY the startup sweep (not plant's own EEXIST handling) can
+    # remove it. Without the sweep it persists and blocks readers forever.
+    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)   # the current deployment
+    orphan = tmp_path / "orphan_fifo"                          # NOT a current deployment
+    os.mkfifo(orphan)
+    (tmp_path / "planted.list").write_text(f"{orphan}\n")      # manifest from a prior run
     _run(server, tmp_path, "--once")
-    # After --once the agent re-plants; the stale pipe must have been swept and
-    # re-created (still a FIFO) rather than colliding on mkfifo EEXIST.
-    assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode)
+    assert not orphan.exists(), "orphan FIFO from manifest was not swept on startup"
+    assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode), "current bait not planted"
