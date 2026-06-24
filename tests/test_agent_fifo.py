@@ -121,6 +121,29 @@ def test_startup_sweeps_a_stale_fifo(server, tmp_path):
     assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode), "current bait not planted"
 
 
+def test_two_agents_one_host_both_detect(server, tmp_path):
+    procs=[]; baits=[]
+    for i in (1,2):
+        d = tmp_path / f"inst{i}"; d.mkdir()
+        bait = d / "bait_aws"; baits.append(bait)
+        # each install gets its own bait path (distinct deployment per server stub run)
+        Stub.bait_path = str(bait)
+        procs.append(subprocess.Popen(
+            ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{server.server_port}",
+             "--enroll-token","e","--tripwire",f"tw_{i}","--state-file",str(d/"agent.json"),
+             "--heartbeat","0","--sync-interval","0"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+        assert _wait(lambda: bait.exists() and stat.S_ISFIFO(bait.stat().st_mode))
+    try:
+        time.sleep(0.5)
+        for b in baits: Path(b).read_text()
+        assert _wait(lambda: sum("event_type=open" in c for c in Stub.callbacks) >= 2), \
+            "both agents should detect — no single-consumer collision"
+    finally:
+        for p in procs: p.terminate()
+        for p in procs: p.wait(timeout=5)
+
+
 def test_atime_stat_order_prefers_portable_access_time():
     # #28: `stat -f %a` on Linux is statfs (free blocks), so the portable
     # `stat -c %X` must be tried FIRST. Assert the script's order.
