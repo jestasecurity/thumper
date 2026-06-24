@@ -192,6 +192,7 @@ export default function EndpointDetail() {
                       <button
                         className="btn-icon danger"
                         title="Remove"
+                        aria-label="Remove tripwire deployment"
                         disabled={busy}
                         onClick={() => setRemoving({ tripwireId: d.tripwire_id, name: nameOf(d.tripwire_id) })}
                       >
