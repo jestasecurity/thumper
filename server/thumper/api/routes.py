@@ -213,7 +213,7 @@ def create_tripwire(body: CreateTripwireIn, db: Session = Depends(get_db)):
         custom_content=body.custom_content,
     )
     tripwire = store.create_tripwire(
-        db, name=body.name, token_type=body.token_type, path=path,
+        db, name=body.name.strip(), token_type=body.token_type, path=path,
         source=body.source, custom_content=body.custom_content, token=token,
     )
     return _tripwire_out(db, tripwire)
