@@ -1,8 +1,3 @@
-# Dependabot keeps the project's dependencies patched (#60). One entry per
-# ecosystem present in the repo: the Python server (pip/pyproject), the React UI
-# (npm), the GitHub Actions we pin, and the runtime Docker base image.
-# Patch/minor bumps are grouped to keep PR volume sane; majors stay separate so
-# breaking changes get their own review.
 version: 2
 updates:
   - package-ecosystem: "pip"

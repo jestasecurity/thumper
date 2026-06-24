@@ -1,9 +1,3 @@
-# Static code analysis (#60): GitHub CodeQL over the Python server and the
-# TypeScript/React UI. Runs on pushes/PRs to main and weekly, so regressions and
-# newly-disclosed query results surface in the Security tab. `security-extended`
-# is used deliberately - this is a security product, so deeper security coverage
-# is worth the extra query time. Python and JS/TS need no build step (CodeQL
-# analyzes the source directly).
 name: CodeQL
 
 on:
