@@ -616,6 +616,14 @@ stop_watcher() {  # kill the watcher AND its fs_usage/grep children
     WATCH_PID=""
 }
 
+remove_fifos() {  # remove every manifest path that is a FIFO (clean exit / startup sweep)
+    [ -f "${MANIFEST_FILE:-}" ] || return 0
+    while IFS= read -r p; do
+        [ -n "$p" ] && [ -p "$p" ] && rm -f "$p" && log "removed fifo bait $p"
+    done < "$MANIFEST_FILE"
+    return 0
+}
+
 # reconcile <old-snapshot>: dep_* already hold the NEW set (post re-pull).
 reconcile() {
     _old=$1
@@ -703,6 +711,7 @@ run() {
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
     probe_fifo_mode
     [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait" || log "sensor: atime poll (mkfifo unavailable)"
+    [ "$FIFO_MODE" = 1 ] && remove_fifos   # clear orphaned pipes from a prior hard-kill before re-planting
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
@@ -744,8 +753,8 @@ run() {
     # release the singleton lock. Combined into one trap (replacing the release-
     # only trap set after acquire_singleton) so none clobbers the others.
     cleanup_heartbeat() { [ -n "$HEARTBEAT_PID" ] && kill "$HEARTBEAT_PID" 2>/dev/null; }
-    trap 'stop_watcher; cleanup_heartbeat; release_singleton; exit 0' INT TERM
-    trap 'stop_watcher; cleanup_heartbeat; release_singleton' EXIT
+    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton; exit 0' INT TERM
+    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton' EXIT
     # Remote kill: the heartbeat loop raises USR1 when the server flags us.
     trap 'self_destruct' USR1
 

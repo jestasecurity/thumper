@@ -96,3 +96,24 @@ def test_reading_the_fifo_fires_a_callback(server, tmp_path):
         assert _wait(lambda: any("event_type=open" in c for c in Stub.callbacks)), "no callback fired"
     finally:
         p.terminate(); p.wait(timeout=5)
+
+def test_clean_exit_removes_fifos(server, tmp_path):
+    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
+    p = subprocess.Popen(
+        ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{server.server_port}",
+         "--enroll-token","e","--tripwire","tw_1","--state-file",str(tmp_path/"agent.json"),
+         "--heartbeat","0","--sync-interval","0"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    assert _wait(lambda: bait.exists())
+    p.terminate(); p.wait(timeout=5)
+    assert not bait.exists(), "FIFO left behind after clean exit"
+
+def test_startup_sweeps_a_stale_fifo(server, tmp_path):
+    # Simulate a prior hard-killed run: a manifest naming a leftover FIFO.
+    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
+    os.mkfifo(bait)
+    (tmp_path / "planted.list").write_text(str(bait) + "\n")
+    _run(server, tmp_path, "--once")
+    # After --once the agent re-plants; the stale pipe must have been swept and
+    # re-created (still a FIFO) rather than colliding on mkfifo EEXIST.
+    assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode)
