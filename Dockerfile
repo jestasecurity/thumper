@@ -1,5 +1,5 @@
 # ── Stage 1: build the React UI ──────────────────────────────────────────────
-FROM node:20-alpine AS ui
+FROM node:26-alpine AS ui
 WORKDIR /ui
 COPY ui/package*.json ./
 RUN npm ci
