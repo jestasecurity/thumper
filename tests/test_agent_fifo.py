@@ -144,10 +144,69 @@ def test_two_agents_one_host_both_detect(server, tmp_path):
         for p in procs: p.wait(timeout=5)
 
 
+def test_duplicate_install_does_not_sweep_live_agents_fifo(server, tmp_path):
+    """C1 regression: a second invocation with the SAME --state-file must exit at
+    the singleton lock WITHOUT deleting the live agent's bait FIFO. The startup
+    sweep (remove_fifos) must only run AFTER acquire_singleton succeeds, so the
+    duplicate invocation — which loses the mutex race and exits early — never
+    touches the first agent's manifest or FIFOs."""
+    bait = tmp_path / "bait_aws"
+    Stub.bait_path = str(bait)
+    state = tmp_path / "agent.json"
+
+    # Start agent A — the live agent.
+    p_a = subprocess.Popen(
+        ["sh", str(AGENT), "run",
+         "--server", f"http://127.0.0.1:{server.server_port}",
+         "--enroll-token", "e", "--tripwire", "tw_1",
+         "--state-file", str(state),
+         "--heartbeat", "0", "--sync-interval", "0"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        # Wait for agent A to plant its FIFO.
+        assert _wait(lambda: bait.exists() and stat.S_ISFIFO(bait.stat().st_mode)), \
+            "agent A did not plant a FIFO in time"
+
+        # Start agent B with the SAME state-file — it must detect the singleton and exit.
+        result_b = subprocess.run(
+            ["sh", str(AGENT), "run",
+             "--server", f"http://127.0.0.1:{server.server_port}",
+             "--enroll-token", "e", "--tripwire", "tw_1",
+             "--state-file", str(state),
+             "--heartbeat", "0", "--sync-interval", "0"],
+            capture_output=True, text=True, timeout=15)
+
+        # B should have exited cleanly (returncode 0, logged "already running").
+        assert result_b.returncode == 0, f"agent B exited with rc={result_b.returncode}"
+
+        # CRITICAL: agent A's FIFO must still exist after B exits.
+        assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode), \
+            "agent B's startup sweep deleted agent A's live bait FIFO!"
+
+        # Confirm the FIFO is still readable — agent A is still serving it.
+        content = Path(bait).read_text()
+        assert content == BAIT_BODY, \
+            f"bait FIFO no longer serves the expected content: {content!r}"
+    finally:
+        p_a.terminate()
+        p_a.wait(timeout=5)
+        import subprocess as _sp
+        _sp.run(["pkill", "-f", "thumper_agent.sh run --server http://127.0.0.1"],
+                capture_output=True)
+
+
 def test_atime_stat_order_prefers_portable_access_time():
     # #28: `stat -f %a` on Linux is statfs (free blocks), so the portable
-    # `stat -c %X` must be tried FIRST. Assert the script's order.
+    # `stat -c %X` must be tried FIRST. Assert BOTH call sites use the right order
+    # so that a future refactor of one cannot silently pass by matching the other.
     src = AGENT.read_text()
-    assert 'stat -c %X "$p" 2>/dev/null || stat -f %a' in src, \
-        "watch_atime must try `stat -c %X` (atime) before `stat -f %a`"
+    # Site 1: initial atime capture at the top of watch_atime
+    assert 'stat -c %X "$p" 2>/dev/null || stat -f %a "$p" 2>/dev/null || echo 0)' in src, \
+        "watch_atime initialisation must try `stat -c %X` before `stat -f %a`"
+    # Site 2: per-poll atime refresh inside the watch loop
+    assert 'stat -c %X "$p" 2>/dev/null || stat -f %a "$p" 2>/dev/null || echo 0' in src, \
+        "watch_atime poll loop must try `stat -c %X` before `stat -f %a`"
+    # The reversed (wrong) order must not appear anywhere in the source
+    assert 'stat -f %a "$p" 2>/dev/null || stat -c %X' not in src, \
+        "source must not contain the wrong stat order (stat -f %a before stat -c %X)"
     assert "watch_fs_usage" not in src, "fs_usage sensor must be removed"

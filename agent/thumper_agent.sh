@@ -16,28 +16,28 @@
 #   4. WATCH   - detect reads and POST an HMAC-signed, enriched callback per
 #                deployment. A read is the signal.
 #
-# Root is NOT needed to plant a user-space bait (~/.aws, ~/.config, ~/.ssh) or for
-# the attacker to read it - Shai-Hulud runs as the dev user, who owns the file.
-# Root is only needed to (a) plant in a system path like /etc/ssh, or (b) run the
-# macOS fs_usage sensor below.
+# Root is NOT needed to plant a user-space bait (~/.aws, ~/.config, ~/.ssh) or to
+# detect reads — the agent runs as the dev user who owns the file. Root is only
+# needed to plant bait in a system path like /etc/ssh.
 #
 # Read detection:
-#   • macOS : `fs_usage`, pre-filtered with grep to ONLY our bait paths before
-#             anything else touches it (so we don't process the whole firehose).
-#             Yields the offending process + (looked-up) user. Needs root.
-#   • else  : st_atime poll fallback. NOTE: best-effort only - many systems
-#             (notably macOS with relatime-style behavior) update atime lazily or
-#             not at all, so this can miss reads. fs_usage is the real sensor.
+#   • Primary : FIFO named-pipe bait (unprivileged). The agent serves bait content
+#               to any opener; `open(O_WRONLY)` blocks until a reader connects, so
+#               every read is a guaranteed, synchronous event. Works on macOS and
+#               Linux without elevated privileges.
+#   • Fallback : st_atime poll (when mkfifo is unavailable on the state-dir fs).
+#               Best-effort only — many systems update atime lazily or not at all,
+#               so this can miss reads and yields no process/user attribution.
 #
-# Example (the shape an MDM/SSH deploy pushes; run as root for fs_usage):
-#   sudo sh thumper_agent.sh run \
+# Example (the shape an MDM/SSH deploy pushes):
+#   sh thumper_agent.sh run \
 #       --server http://localhost:8000 --enroll-token dev-enroll-token \
 #       --tripwire tw_ab12cd34
+#   # (sudo only if planting in a system path like /etc/ssh)
 
 set -eu
 
 DEFAULT_STATE="$HOME/.thumper/agent.json"
-READ_OPS="open read RdData pread readlink mmap"
 # macOS background daemons that legitimately touch files (indexing/backup/security).
 NOISE_PROCS="sh bash thumper_agent curl mds mds_stores mdworker mdworker_shared mdbulkimport mdflagwriter mdsync fseventsd backupd tccd syspolicyd XProtect XprotectService quicklookd Spotlight mdiagnosticd"
 DEBOUNCE_SECS=3
@@ -164,7 +164,7 @@ gen_machine_id() {
 
 platform() { uname -s | tr 'A-Z' 'a-z'; }   # darwin | linux
 
-# ── target user / path expansion (when running as root for fs_usage) ──────────
+# ── target user / path expansion (when running as root for system-path planting) ──
 # Resolve the real desktop/dev user so bait lands in THEIR home and is owned by
 # them (the threat reads as that user), not /var/root.
 TARGET_USER=""
@@ -318,6 +318,7 @@ plant() {  # plant <i>
 
     if [ "$FIFO_MODE" = 1 ]; then
         mkdir -p "$BAITCACHE"
+        chmod 700 "$BAITCACHE" 2>/dev/null || true
         cf=$(cache_path "$id")
         if ! curl -fsS "$url" -H "Authorization: Bearer $AGENT_TOKEN" -o "$cf"; then
             rm -f "$cf"; err "failed to fetch bait for $id"; report_plant "$id" failed; return 1
@@ -393,8 +394,8 @@ _fire() {
             if [ "$FIRE_RETRIED" = "0" ] && resync; then
                 FIRE_RETRIED=1
                 # NOTE: recovers a rotated deployment id/secret for an EXISTING
-                # tripwire+path. If the path itself changed, the fs_usage grep
-                # filter won't see future reads until the watcher restarts.
+                # tripwire+path. After resync, dep_index_for_line re-matches the
+                # path against the refreshed deployment set.
                 new_idx=$(dep_index_for_line "$accessed_path") || {
                     err "callback REJECTED - path not deployed after re-enroll ($summary)"; return 0; }
                 _fire "$new_idx" "$event_type" "$process" "$pid" "$os_user" "$accessed_path"
@@ -454,6 +455,7 @@ self_destruct() {
     # Remove only the files we created, then rmdir. No `rm -rf` on a derived path:
     # rmdir is non-recursive and refuses a non-empty dir, so a misconfigured
     # --state-file can never wipe '/', $HOME, or anything we didn't plant here.
+    rm -rf "$BAITCACHE" 2>/dev/null || true   # fake creds must not linger after decommission
     rm -f "$STATE_FILE" "$MANIFEST_FILE" "$dir/agent.log" "$dir/thumper_agent.sh"
     rmdir "$dir" 2>/dev/null || log "left $dir in place (not empty)"
     log "agent removed"
@@ -470,11 +472,10 @@ dep_index_for_line() {  # echo the deployment index whose path appears in the li
     return 1
 }
 
-is_read_op() { for op in $READ_OPS; do [ "$op" = "$1" ] && return 0; done; return 1; }
 is_noise()   { for n in $NOISE_PROCS; do [ "$n" = "$1" ] && return 0; done; return 1; }
 
 watch_atime() {
-    log "fs_usage unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
+    log "mkfifo unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
     i=1
     while [ "$i" -le "$DEP_COUNT" ]; do
         eval "p=\$dep_path_$i"
@@ -532,7 +533,7 @@ attribute() {  # attribute <fifo> ; best-effort set globals pid/process/os_user
     # is not our serve subshell ($$). Inode matched as a standalone field so a
     # blank DEVICE column can't shift parsing.
     pid=$(lsof -nP 2>/dev/null | awk -v ino="$ino" -v me="$$" '
-        index($0,"FIFO") && $2!=me && $4 ~ /r$/ && $0 ~ ("(^|[ \t])" ino "([ \t]|$)") { print $2; exit }')
+        index($0,"FIFO") && $2!=me && $4 ~ /r$/ && $0 ~ ("(^|[[:space:]])" ino "([[:space:]]|$)") { print $2; exit }')
     [ -n "$pid" ] || { pid=""; return 0; }
     process=$(ps -o comm= -p "$pid" 2>/dev/null | sed 's#.*/##' | tr -d ' ')
     os_user=$(user_of_pid "$pid")
@@ -571,11 +572,11 @@ start_watcher() {  # launch the right sensor in the background; set WATCH_PID
     WATCH_PID=$!
 }
 
-stop_watcher() {  # kill the watcher AND its fs_usage/grep children
+stop_watcher() {  # kill the watcher AND its serve_fifo children
     [ -n "${WATCH_PID:-}" ] || return 0
-    # Reap children FIRST. Killing the subshell first makes the kernel reparent
-    # fs_usage/grep to PID 1, after which `pkill -P "$WATCH_PID"` matches nothing
-    # and leaks a root fs_usage on every reconcile.
+    # Reap children FIRST. Killing the parent subshell first makes the kernel
+    # reparent serve_fifo children to PID 1, after which `pkill -P "$WATCH_PID"`
+    # matches nothing and leaks serving loops on every reconcile.
     pkill -P "$WATCH_PID" 2>/dev/null || true
     kill "$WATCH_PID" 2>/dev/null || true
     WATCH_PID=""
@@ -681,13 +682,16 @@ run() {
     mkdir -p "$(dirname "$STATE_FILE")"
     probe_fifo_mode
     [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait" || log "sensor: atime poll (mkfifo unavailable)"
-    [ "$FIFO_MODE" = 1 ] && remove_fifos   # clear orphaned pipes from a prior hard-kill before re-planting
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
     acquire_singleton
     trap 'release_singleton; exit 0' INT TERM
     trap 'release_singleton' EXIT
+    # Only the lock holder sweeps stale FIFOs from a prior hard-kill; a duplicate
+    # invocation exits at acquire_singleton above and must never touch the live
+    # agent's shared manifest/FIFOs (MDM re-push safety).
+    [ "$FIFO_MODE" = 1 ] && remove_fifos
     resolve_target_user
 
     # Abort BEFORE enrolling if any bait path is occupied, so a refused install
