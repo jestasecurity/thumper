@@ -85,6 +85,18 @@ TOKEN_TYPES = [
         "description": "Fake GitLab personal access token (glpat- prefix). "
                        "Attackers scan CI configs and dotfiles for these.",
     },
+    {
+        "type": "npm",
+        "display_name": "npm token",
+        "default_path": "~/.npmrc",
+        "suggested_paths": [
+            "~/.npmrc",
+            "~/project/.npmrc",
+            "~/.env",
+        ],
+        "description": "Fake npm registry auth token. Shai-Hulud's primary target — "
+                       "the worm exfiltrates .npmrc files to self-replicate.",
+    },
 ]
 
 TOKEN_TYPE_NAMES = {token_type["type"] for token_type in TOKEN_TYPES}

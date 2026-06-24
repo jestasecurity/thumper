@@ -73,6 +73,11 @@ class TestGenerateToken:
         assert "glpat-" in token
         assert "GITLAB_TOKEN" in token
 
+    def test_npm_contains_auth_token(self):
+        token = generate_token("npm")
+        assert "_authToken=npm_" in token
+        assert "//registry.npmjs.org/" in token
+
     def test_invalid_type_raises_valueerror(self):
         with pytest.raises(ValueError, match="nope"):
             generate_token("nope")

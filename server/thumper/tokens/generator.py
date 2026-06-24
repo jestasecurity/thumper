@@ -79,4 +79,8 @@ def generate_token(token_type: str) -> str:
             f"GITLAB_API_URL=https://gitlab.com/api/v4\n"
         )
 
+    if token_type == "npm":
+        token = f"npm_{rand_hex(36)}"
+        return f"//registry.npmjs.org/:_authToken={token}\n"
+
     raise ValueError(f"unknown token type: {token_type!r}")

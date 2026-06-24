@@ -85,3 +85,17 @@ def test_post_tripwire_gitlab_generates_glpat(client_db):
     row = store.get_tripwire(db, tid)
     assert row.token is not None
     assert "glpat-" in row.token
+
+
+def test_post_tripwire_npm_generates_authtoken(client_db):
+    tc, db = client_db
+    resp = tc.post("/api/tripwires", json={
+        "name": "npm-bait", "token_type": "npm",
+        "path": "~/.npmrc", "source": "template",
+    })
+    assert resp.status_code == 200
+    tid = resp.json()["id"]
+    db.expire_all()
+    row = store.get_tripwire(db, tid)
+    assert row.token is not None
+    assert "_authToken=npm_" in row.token
