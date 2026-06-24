@@ -48,6 +48,18 @@ REPLANT_MAX=3   # max re-plant attempts per deployment before giving up (verify 
 # enroll storm.
 RESYNC_COOLDOWN=30
 LAST_RESYNC=0
+# FIFO sensor: bait is a named pipe the agent serves. Probed once against the
+# state dir's filesystem; if mkfifo is unavailable there we fall back to the
+# (fixed) atime poll. Bait content is cached to BAITCACHE so the per-bait
+# serving loop can re-serve it on every read.
+FIFO_MODE=0
+BAITCACHE=""
+probe_fifo_mode() {
+    command -v mkfifo >/dev/null 2>&1 || { FIFO_MODE=0; return; }
+    _probe="$(dirname "$STATE_FILE")/.fifoprobe.$$"
+    if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; FIFO_MODE=1; else FIFO_MODE=0; fi
+}
+cache_path() { printf '%s/%s' "$BAITCACHE" "$1"; }   # cache_path <deployment-id>
 TAB=$(printf '\t')
 
 log() { printf '[thumper %s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
@@ -300,6 +312,25 @@ plant() {  # plant <i>
         err "refusing to write through symlink at $path - skipping $id"
         report_plant "$id" failed
         return 1
+    fi
+
+    if [ "$FIFO_MODE" = 1 ]; then
+        mkdir -p "$BAITCACHE"
+        cf=$(cache_path "$id")
+        if ! curl -fsS "$url" -H "Authorization: Bearer $AGENT_TOKEN" -o "$cf"; then
+            rm -f "$cf"; err "failed to fetch bait for $id"; report_plant "$id" failed; return 1
+        fi
+        chmod 600 "$cf" 2>/dev/null || true
+        [ -p "$path" ] && rm -f "$path"          # replace our own stale FIFO on re-plant
+        if ! mkfifo "$path" 2>/dev/null; then
+            err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
+        fi
+        record_planted "$path"
+        chmod 600 "$path" 2>/dev/null || true
+        [ -n "$TARGET_USER" ] && chown "$TARGET_USER" "$path" 2>/dev/null || true
+        report_plant "$id" planted
+        log "planted (fifo) $id -> $path"
+        return 0
     fi
 
     if ! curl -fsS "$url" -H "Authorization: Bearer $AGENT_TOKEN" -o "$path"; then
@@ -632,6 +663,9 @@ verify_planted() {
 run() {
     STATE_FILE=${STATE_FILE:-$DEFAULT_STATE}
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
+    BAITCACHE="$(dirname "$STATE_FILE")/bait"
+    probe_fifo_mode
+    [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait" || log "sensor: atime poll (mkfifo unavailable)"
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
