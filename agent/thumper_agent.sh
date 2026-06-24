@@ -58,6 +58,7 @@ probe_fifo_mode() {
     command -v mkfifo >/dev/null 2>&1 || { FIFO_MODE=0; return; }
     _probe="$(dirname "$STATE_FILE")/.fifoprobe.$$"
     if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; FIFO_MODE=1; else FIFO_MODE=0; fi
+    unset _probe
 }
 cache_path() { printf '%s/%s' "$BAITCACHE" "$1"; }   # cache_path <deployment-id>
 TAB=$(printf '\t')
@@ -323,7 +324,7 @@ plant() {  # plant <i>
         chmod 600 "$cf" 2>/dev/null || true
         [ -p "$path" ] && rm -f "$path"          # replace our own stale FIFO on re-plant
         if ! mkfifo "$path" 2>/dev/null; then
-            err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
+            rm -f "$cf"; err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
         fi
         record_planted "$path"
         chmod 600 "$path" 2>/dev/null || true

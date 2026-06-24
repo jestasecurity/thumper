@@ -1,7 +1,7 @@
 """FIFO bait sensor (#100): bait is planted as a named pipe; a read of it
 unblocks the agent's write and fires a callback. Driven against a stub server,
 like test_agent_live_sync.py."""
-import http.server, socket, subprocess, threading, time, os, stat
+import http.server, subprocess, threading, os, stat
 from pathlib import Path
 import pytest
 
