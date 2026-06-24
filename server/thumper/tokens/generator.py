@@ -71,4 +71,12 @@ def generate_token(token_type: str) -> str:
             "-----END OPENSSH PRIVATE KEY-----\n"
         )
 
+    if token_type == "gitlab":
+        pat = f"glpat-{rand_hex(20)}"
+        return (
+            "# GitLab Personal Access Token\n"
+            f"GITLAB_TOKEN={pat}\n"
+            f"GITLAB_API_URL=https://gitlab.com/api/v4\n"
+        )
+
     raise ValueError(f"unknown token type: {token_type!r}")

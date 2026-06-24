@@ -71,3 +71,17 @@ def test_enroll_uses_stored_tripwire_token(client_db):
     deployments = store.list_deployments_for_endpoint(db, endpoint_id)
     assert len(deployments) == 1
     assert deployments[0].content == stored_token
+
+
+def test_post_tripwire_gitlab_generates_glpat(client_db):
+    tc, db = client_db
+    resp = tc.post("/api/tripwires", json={
+        "name": "gitlab-bait", "token_type": "gitlab",
+        "path": "~/.python-gitlab.cfg", "source": "template",
+    })
+    assert resp.status_code == 200
+    tid = resp.json()["id"]
+    db.expire_all()
+    row = store.get_tripwire(db, tid)
+    assert row.token is not None
+    assert "glpat-" in row.token

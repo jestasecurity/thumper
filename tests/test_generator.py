@@ -68,6 +68,11 @@ class TestGenerateToken:
         assert "BEGIN OPENSSH PRIVATE KEY" in token
         assert "END OPENSSH PRIVATE KEY" in token
 
+    def test_gitlab_contains_glpat(self):
+        token = generate_token("gitlab")
+        assert "glpat-" in token
+        assert "GITLAB_TOKEN" in token
+
     def test_invalid_type_raises_valueerror(self):
         with pytest.raises(ValueError, match="nope"):
             generate_token("nope")

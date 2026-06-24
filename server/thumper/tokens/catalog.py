@@ -72,6 +72,19 @@ TOKEN_TYPES = [
         "description": "Fake private key. Any read is almost certainly malicious. "
                        "Host-key paths (/etc/ssh/ssh_host_*_key) catch server-side snooping.",
     },
+    {
+        "type": "gitlab",
+        "display_name": "GitLab PAT",
+        "default_path": "~/.config/glab-cli/config.yml",
+        "suggested_paths": [
+            "~/.config/glab-cli/config.yml",
+            "~/.python-gitlab.cfg",
+            "~/.env",
+            "~/.gitlab-ci.yml",
+        ],
+        "description": "Fake GitLab personal access token (glpat- prefix). "
+                       "Attackers scan CI configs and dotfiles for these.",
+    },
 ]
 
 TOKEN_TYPE_NAMES = {token_type["type"] for token_type in TOKEN_TYPES}
