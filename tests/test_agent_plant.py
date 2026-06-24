@@ -10,6 +10,7 @@ does not start watching - rather than skipping one file and continuing.
 """
 
 import http.server
+import stat
 import subprocess
 import threading
 from pathlib import Path
@@ -133,8 +134,8 @@ def test_plants_all_when_no_conflicts(agent):
 
     assert result.returncode == 0
     assert "/api/enroll" in _StubHandler.seen, "did not enroll on a clean install"
-    assert Path(a).read_text() == BAIT_BODY
-    assert Path(b).read_text() == BAIT_BODY
+    assert stat.S_ISFIFO(Path(a).stat().st_mode), "bait not planted as FIFO"
+    assert stat.S_ISFIFO(Path(b).stat().st_mode), "bait not planted as FIFO"
 
 
 def test_refreshes_its_own_bait(agent):
@@ -145,7 +146,7 @@ def test_refreshes_its_own_bait(agent):
     assert run().returncode == 0
     Path(path).write_text("stale-bait")  # simulate server-side rotation
     assert run().returncode == 0
-    assert Path(path).read_text() == BAIT_BODY
+    assert stat.S_ISFIFO(Path(path).stat().st_mode), "bait not planted as FIFO"
 
 
 def test_force_overwrites_occupied_path(agent):
@@ -157,4 +158,4 @@ def test_force_overwrites_occupied_path(agent):
     result = run("--force")
 
     assert result.returncode == 0
-    assert Path(path).read_text() == BAIT_BODY
+    assert stat.S_ISFIFO(Path(path).stat().st_mode), "bait not planted as FIFO"

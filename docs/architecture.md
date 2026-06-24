@@ -66,10 +66,13 @@ language runtime. Delivered by a deploy plugin or manual copy.
 
 The agent checks for path conflicts, self-enrolls with the server, pulls its
 unique deployments (each with its own bait content and HMAC secret), plants the
-files, and continuously monitors them for read access. On macOS it uses
-`fs_usage` for real-time process-level detection; elsewhere it falls back to
-`st_atime` polling. When a read is detected, the agent sends an HMAC-signed
-callback to the server with enriched context (process, pid, user, path).
+files, and continuously monitors them for read access. Each bait is planted as a
+named pipe (FIFO); the agent holds the write end, so any process that opens the
+bait to read it unblocks the agent and is detected in real time, unprivileged,
+on macOS and Linux. The reading process/user is attributed best-effort via
+`lsof`. When `mkfifo` is unavailable, the agent falls back to `st_atime`
+polling. When a read is detected, the agent sends an HMAC-signed callback to
+the server with enriched context (process, pid, user, path).
 
 #### Singleton lock
 

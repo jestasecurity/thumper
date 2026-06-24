@@ -119,3 +119,12 @@ def test_startup_sweeps_a_stale_fifo(server, tmp_path):
     _run(server, tmp_path, "--once")
     assert not orphan.exists(), "orphan FIFO from manifest was not swept on startup"
     assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode), "current bait not planted"
+
+
+def test_atime_stat_order_prefers_portable_access_time():
+    # #28: `stat -f %a` on Linux is statfs (free blocks), so the portable
+    # `stat -c %X` must be tried FIRST. Assert the script's order.
+    src = AGENT.read_text()
+    assert 'stat -c %X "$p" 2>/dev/null || stat -f %a' in src, \
+        "watch_atime must try `stat -c %X` (atime) before `stat -f %a`"
+    assert "watch_fs_usage" not in src, "fs_usage sensor must be removed"

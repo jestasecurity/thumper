@@ -39,7 +39,7 @@ set -eu
 DEFAULT_STATE="$HOME/.thumper/agent.json"
 READ_OPS="open read RdData pread readlink mmap"
 # macOS background daemons that legitimately touch files (indexing/backup/security).
-NOISE_PROCS="fs_usage sh bash thumper_agent curl mds mds_stores mdworker mdworker_shared mdbulkimport mdflagwriter mdsync fseventsd backupd tccd syspolicyd XProtect XprotectService quicklookd Spotlight mdiagnosticd"
+NOISE_PROCS="sh bash thumper_agent curl mds mds_stores mdworker mdworker_shared mdbulkimport mdflagwriter mdsync fseventsd backupd tccd syspolicyd XProtect XprotectService quicklookd Spotlight mdiagnosticd"
 DEBOUNCE_SECS=3
 REPLANT_MAX=3   # max re-plant attempts per deployment before giving up (verify pass)
 # After a callback is rejected with 401 (server no longer knows this deployment -
@@ -322,7 +322,7 @@ plant() {  # plant <i>
             rm -f "$cf"; err "failed to fetch bait for $id"; report_plant "$id" failed; return 1
         fi
         chmod 600 "$cf" 2>/dev/null || true
-        [ -p "$path" ] && rm -f "$path"          # replace our own stale FIFO on re-plant
+        { [ -p "$path" ] || [ -f "$path" ]; } && rm -f "$path"  # replace our own stale bait on re-plant
         if ! mkfifo "$path" 2>/dev/null; then
             rm -f "$cf"; err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
         fi
@@ -472,48 +472,12 @@ dep_index_for_line() {  # echo the deployment index whose path appears in the li
 is_read_op() { for op in $READ_OPS; do [ "$op" = "$1" ] && return 0; done; return 1; }
 is_noise()   { for n in $NOISE_PROCS; do [ "$n" = "$1" ] && return 0; done; return 1; }
 
-watch_fs_usage() {
-    # Build a grep filter of just our bait paths so fs_usage's firehose is trimmed
-    # at the source - the shell loop only ever sees lines about our files.
-    set --
-    i=1
-    while [ "$i" -le "$DEP_COUNT" ]; do
-        eval "p=\$dep_path_$i"
-        set -- "$@" -e "$p"
-        i=$((i + 1))
-    done
-
-    cmd="fs_usage -w -f filesys"
-    [ "$(id -u)" = "0" ] || cmd="sudo -n $cmd"
-    command -v fs_usage >/dev/null 2>&1 || return 1
-
-    log "watching $DEP_COUNT bait file(s) via fs_usage"
-    # shellcheck disable=SC2086
-    $cmd 2>/dev/null | grep --line-buffered -F "$@" | while read -r line; do
-        op=$(printf '%s' "$line" | awk '{print $2}')
-        is_read_op "$op" || continue
-        idx=$(dep_index_for_line "$line") || continue
-        last_field=$(printf '%s' "$line" | awk '{print $NF}')
-        process=$(printf '%s' "$last_field" | sed 's/\.[0-9][0-9]*$//')
-        pid=$(printf '%s' "$last_field" | sed -n 's/.*\.\([0-9][0-9]*\)$/\1/p')
-        is_noise "$process" && continue
-        now=$(date +%s)
-        eval "last=\$dep_last_$idx"
-        [ $((now - last)) -lt "$DEBOUNCE_SECS" ] && continue
-        eval "dep_last_$idx=\$now"
-        eval "watched=\$dep_path_$idx"
-        os_user=""; [ -n "$pid" ] && os_user=$(user_of_pid "$pid")
-        fire "$idx" "$op" "$process" "$pid" "$os_user" "$watched"
-    done
-    return 0
-}
-
 watch_atime() {
     log "fs_usage unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
     i=1
     while [ "$i" -le "$DEP_COUNT" ]; do
         eval "p=\$dep_path_$i"
-        eval "atime_$i=\$(stat -f %a \"\$p\" 2>/dev/null || stat -c %X \"\$p\" 2>/dev/null || echo 0)"
+        eval "atime_$i=\$(stat -c %X \"\$p\" 2>/dev/null || stat -f %a \"\$p\" 2>/dev/null || echo 0)"
         i=$((i + 1))
     done
     while true; do
@@ -521,7 +485,7 @@ watch_atime() {
         i=1
         while [ "$i" -le "$DEP_COUNT" ]; do
             eval "p=\$dep_path_$i prev=\$atime_$i"
-            cur=$(stat -f %a "$p" 2>/dev/null || stat -c %X "$p" 2>/dev/null || echo 0)
+            cur=$(stat -c %X "$p" 2>/dev/null || stat -f %a "$p" 2>/dev/null || echo 0)
             if [ "$cur" != "0" ] && [ "$cur" -gt "$prev" ] 2>/dev/null; then
                 eval "atime_$i=\$cur"
                 fire "$i" "atime-change" "" "" "" "$p"
@@ -679,6 +643,9 @@ verify_planted() {
             # and never re-plant through it (curl -o would write the target); report
             # failed so the lost coverage is visible.
             report_plant "$vid" failed
+        elif [ "$FIFO_MODE" = 1 ] && [ -e "$p" ] && ! [ -p "$p" ]; then
+            # A regular file where our FIFO should be = tampering/replacement.
+            report_plant "$vid" failed
         elif [ -e "$p" ]; then
             # Bait is on disk → re-assert planted every cycle. Recovers a deployment
             # whose initial report was lost (e.g. a network blip during report_plant)
@@ -709,6 +676,7 @@ run() {
     STATE_FILE=${STATE_FILE:-$DEFAULT_STATE}
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
+    mkdir -p "$(dirname "$STATE_FILE")"
     probe_fifo_mode
     [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait" || log "sensor: atime poll (mkfifo unavailable)"
     [ "$FIFO_MODE" = 1 ] && remove_fifos   # clear orphaned pipes from a prior hard-kill before re-planting
