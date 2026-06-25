@@ -201,12 +201,16 @@ do_enroll() {
     machine_id=$(state_get "$STATE_FILE" machine_id)
     [ -n "$machine_id" ] || machine_id=$(gen_machine_id)
 
+    _enroll_extra=""
+    [ "$EPHEMERAL" = 1 ] && _enroll_extra="--data-urlencode ephemeral=1"
+    # shellcheck disable=SC2086
     resp=$(curl -fsS -X POST "$SERVER/api/enroll" \
         --data-urlencode "enroll_token=$ENROLL_TOKEN" \
         --data-urlencode "hostname=$(hostname)" \
         --data-urlencode "machine_id=$machine_id" \
         --data-urlencode "platform=$(platform)" \
-        --data-urlencode "tripwire_ids=$TRIPWIRES") || {
+        --data-urlencode "tripwire_ids=$TRIPWIRES" \
+        $_enroll_extra) || {
         err "enroll failed"; return 1; }
 
     AGENT_TOKEN=$(printf '%s\n' "$resp" | sed -n 's/^agent_token=//p' | head -n1)
@@ -742,6 +746,12 @@ run() {
     # Remote kill: the heartbeat loop raises USR1 when the server flags us.
     trap 'self_destruct' USR1
 
+    if [ "$EPHEMERAL" = 1 ]; then
+        # CI per-job endpoint: on job end / SIGTERM, fully decommission (unplant +
+        # tell the server to drop the row) instead of just releasing the lock.
+        trap 'self_destruct' INT TERM EXIT
+    fi
+
     start_watcher
 
     # No live sync: behave as before - block on the watcher.
@@ -786,11 +796,12 @@ usage: thumper_agent.sh run --server URL --enroll-token TOKEN [options]
   --once               enroll + plant, then exit
   --simulate           fire a signed callback for each deployment, then exit
   --force              overwrite a path even if a file we didn't plant is there
+  --ephemeral          per-job CI endpoint; auto-decommissions on exit
 EOF
     exit 2
 }
 
-SERVER=""; ENROLL_TOKEN=""; TRIPWIRES=""; STATE_FILE=""; POLL=5; HEARTBEAT=60; SYNC_INTERVAL=300; ONCE=0; SIMULATE=0; FORCE=0
+SERVER=""; ENROLL_TOKEN=""; TRIPWIRES=""; STATE_FILE=""; POLL=5; HEARTBEAT=60; SYNC_INTERVAL=300; ONCE=0; SIMULATE=0; FORCE=0; EPHEMERAL=0
 
 [ "${1:-}" = "run" ] || usage
 shift
@@ -806,6 +817,7 @@ while [ $# -gt 0 ]; do
         --once)         ONCE=1; shift ;;
         --simulate)     SIMULATE=1; shift ;;
         --force)        FORCE=1; shift ;;
+        --ephemeral)    EPHEMERAL=1; shift ;;
         *) err "unknown argument: $1"; usage ;;
     esac
 done
