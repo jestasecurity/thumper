@@ -1,5 +1,5 @@
 # ── Stage 1: build the React UI ──────────────────────────────────────────────
-FROM node:20-alpine AS ui
+FROM node:26-alpine AS ui
 WORKDIR /ui
 COPY ui/package*.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY ui/ ./
 RUN npm run build
 
 # ── Stage 2: the monolith (FastAPI + bundled UI) ─────────────────────────────
-FROM python:3.12-slim
+FROM python:3.14-slim
 WORKDIR /app
 
 COPY pyproject.toml README.md ./

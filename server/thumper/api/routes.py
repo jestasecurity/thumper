@@ -9,6 +9,7 @@ Two distinct contracts live here:
 """
 import hmac
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
@@ -45,11 +46,14 @@ from ..plugins.registry import get_manifest, load_plugin, public_manifests
 from ..services.alerting import deliver_alert
 from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
-from ..services.integrations import mask_config, merge_config, saved_config
+from ..services.integrations import mask_config, merge_config, redact_secrets, saved_config
+from ..services.secrets_crypto import ConfigDecryptError, unpack_config
 from ..services.signing import verify
+from ..services.ssrf import SsrfError, assert_config_urls_allowed
 from ..tokens import TOKEN_TYPES
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger("thumper.api")
 
 _STALE_WINDOW = timedelta(minutes=15)
 _INACTIVE_WINDOW = timedelta(hours=12)
@@ -102,6 +106,17 @@ def _endpoint_status(last_seen: str | None) -> str:
     return "inactive"
 
 
+def _endpoint_status_full(endpoint) -> str:
+    """Liveness status for an endpoint, including the decommissioning override and
+    the missing-endpoint case. Single source of truth so _endpoint_out and
+    _deployment_out can't drift if a new status is ever added."""
+    if endpoint is None:
+        return "inactive"
+    if endpoint.decommission_requested_at:
+        return "decommissioning"
+    return _endpoint_status(endpoint.last_seen)
+
+
 def _tripwire_out(db, tripwire, *, deployed_count=None, triggered_count=None) -> TripwireOut:
     if deployed_count is None:
         deployed_count = len(store.list_deployments_for_tripwire(db, tripwire.id))
@@ -118,6 +133,7 @@ def _tripwire_out(db, tripwire, *, deployed_count=None, triggered_count=None) ->
 
 def _deployment_out(db, deployment) -> DeploymentOut:
     endpoint = store.get_endpoint(db, deployment.endpoint_id)
+    endpoint_status = _endpoint_status_full(endpoint)
     return DeploymentOut(
         id=deployment.id, tripwire_id=deployment.tripwire_id,
         endpoint_id=deployment.endpoint_id,
@@ -125,6 +141,7 @@ def _deployment_out(db, deployment) -> DeploymentOut:
         state=deployment.state, created_at=deployment.created_at,
         last_triggered=deployment.last_triggered,
         triggered_count=store.count_alerts_for_deployment(db, deployment.id),
+        endpoint_status=endpoint_status,
     )
 
 
@@ -137,8 +154,7 @@ def _endpoint_out(db, endpoint, *, deployment_count=None, triggered_count=None) 
     return EndpointOut(
         id=endpoint_id, hostname=endpoint.hostname, platform=endpoint.platform,
         enrolled_at=endpoint.enrolled_at, last_seen=endpoint.last_seen,
-        status="decommissioning" if endpoint.decommission_requested_at
-        else _endpoint_status(endpoint.last_seen),
+        status=_endpoint_status_full(endpoint),
         deployment_count=deployment_count,
         triggered_count=triggered_count,
     )
@@ -403,13 +419,21 @@ def list_integrations(db: Session = Depends(get_db)):
     out = []
     for manifest in public_manifests():
         rec = saved.get(manifest["name"])
-        config = mask_config(manifest, json.loads(rec.config_json)) if rec else {}
+        config, unreadable = {}, None
+        if rec:
+            try:
+                config = mask_config(manifest, unpack_config(rec.config_json))
+            except ConfigDecryptError as exc:
+                # One row encrypted under a changed/missing key must not 500 the
+                # whole list - surface just that integration as unreadable.
+                log.warning("integration %s config unreadable: %s", rec.plugin, exc)
+                unreadable = str(exc)
         out.append(IntegrationOut(
             plugin=manifest["name"], kind=manifest["kind"],
             configured=bool(rec and rec.configured), config=config,
-            last_test_status=rec.last_test_status if rec else None,
+            last_test_status="failed" if unreadable else (rec.last_test_status if rec else None),
             last_test_at=rec.last_test_at if rec else None,
-            last_test_error=rec.last_test_error if rec else None,
+            last_test_error=unreadable or (rec.last_test_error if rec else None),
         ))
     return out
 
@@ -420,6 +444,10 @@ def save_integration(plugin: str, config: dict, db: Session = Depends(get_db)):
     if manifest is None:
         raise HTTPException(404, "unknown plugin")
     merged = merge_config(saved_config(db, plugin), config)
+    try:
+        assert_config_urls_allowed(plugin, merged)  # SSRF guard (#74)
+    except SsrfError as exc:
+        raise HTTPException(400, str(exc))
     store.upsert_integration(db, plugin=plugin, kind=manifest["kind"], config=merged)
     return IntegrationOut(plugin=plugin, kind=manifest["kind"], configured=True,
                           config=mask_config(manifest, merged))
@@ -443,7 +471,9 @@ def test_integration(plugin: str, db: Session = Depends(get_db)):
     try:
         load_plugin(plugin, cfg).test()
     except Exception as exc:  # noqa: BLE001 - surface any failure as a test result
-        error = str(exc)[:500] or exc.__class__.__name__
+        # Redact credentials (e.g. a token-bearing webhook URL) the exception may
+        # echo, before storing/returning it (#33).
+        error = redact_secrets(str(exc)[:500], cfg) or exc.__class__.__name__
         store.set_integration_test_result(db, plugin=plugin, status="failed", error=error)
         return IntegrationTestResult(ok=False, error=error, tested_at=iso_now())
     store.set_integration_test_result(db, plugin=plugin, status="ok", error=None)
@@ -509,6 +539,18 @@ DIR="${{THUMPER_DIR:-/usr/local/thumper}}"
 for tool in curl openssl; do
   command -v "$tool" >/dev/null 2>&1 || {{ echo "thumper: $tool is required"; exit 1; }}
 done
+# Linux read detection prefers inotify; ensure inotify-tools (every main distro
+# packages it, none preinstall it). Best-effort - the agent falls back to atime
+# polling if this can't run (offline / locked-down host).
+if [ "$(uname -s)" = "Linux" ] && ! command -v inotifywait >/dev/null 2>&1; then
+  ( if command -v apt-get >/dev/null 2>&1; then apt-get update -qq && apt-get install -y inotify-tools;
+    elif command -v dnf >/dev/null 2>&1; then dnf install -y inotify-tools;
+    elif command -v yum >/dev/null 2>&1; then yum install -y inotify-tools;
+    elif command -v zypper >/dev/null 2>&1; then zypper -n install inotify-tools;
+    elif command -v apk >/dev/null 2>&1; then apk add inotify-tools;
+    elif command -v pacman >/dev/null 2>&1; then pacman -Sy --noconfirm inotify-tools;
+    fi ) >/dev/null 2>&1 || echo "thumper: could not install inotify-tools; using atime fallback"
+fi
 mkdir -p "$DIR"
 curl -fsSL "$SERVER/api/agent/thumper_agent.sh" -o "$DIR/thumper_agent.sh"
 chmod +x "$DIR/thumper_agent.sh"
@@ -517,7 +559,15 @@ chmod +x "$DIR/thumper_agent.sh"
 nohup sh "$DIR/thumper_agent.sh" run \\
   --server "$SERVER" --enroll-token "$ENROLL_TOKEN" {tw_args} \\
   --heartbeat 60 --state-file "$DIR/agent.json" >"$DIR/agent.log" 2>&1 &
-echo "thumper: agent installed in $DIR and watching (logs: $DIR/agent.log)"
+# The agent may exit immediately if another instance is already running.
+# Wait briefly and verify it is alive before reporting success.
+sleep 1
+if kill -0 $! 2>/dev/null; then
+  echo "thumper: agent installed in $DIR and watching (logs: $DIR/agent.log)"
+else
+  echo "thumper: agent exited immediately; check $DIR/agent.log" >&2
+  exit 1
+fi
 """
     return PlainTextResponse(script, media_type="text/x-shellscript")
 
@@ -706,7 +756,11 @@ async def trigger(request: Request, background: BackgroundTasks,
         pid=int(pid) if pid and str(pid).isdigit() else None,
         os_user=data.get("os_user"),
         event_type=data.get("event_type"),
-        timestamp=data.get("timestamp"),
+        # Store a canonical UTC timestamp, not the agent's raw string: the 24h
+        # count and list ordering compare timestamps as strings, so offset /
+        # fractional-second formats would break them (#31). `ts` is already parsed
+        # and validated above.
+        timestamp=ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         triggered_by=data.get("triggered_by"),
     )
     # Only a pending deployment becomes planted. A failed one stays failed.

@@ -2,8 +2,11 @@
 unblocks the agent's write and fires a callback. Driven against a stub server,
 like test_agent_live_sync.py."""
 import http.server, subprocess, threading, os, stat, time
+import platform as _platform
 from pathlib import Path
 import pytest
+
+pytestmark = pytest.mark.skipif(_platform.system() != "Darwin", reason="FIFO sensor is macOS-only; Linux uses inotify")
 
 AGENT = Path(__file__).resolve().parents[1] / "agent" / "thumper_agent.sh"
 BAIT_BODY = "AKIA-BAIT\nsecret=shhh\n"

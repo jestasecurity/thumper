@@ -187,7 +187,7 @@ export default function EndpointDetail() {
                     <td className="path">{d.id}</td>
                     <td className="muted">{timeAgo(d.created_at)}</td>
                     <td className="muted">{d.last_triggered ? timeAgo(d.last_triggered) : "-"}</td>
-                    <td><DeployBadge state={d.state} triggered={d.triggered_count} /></td>
+                    <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} /></td>
                     <td>
                       <button
                         className="btn-icon danger"

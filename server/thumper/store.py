@@ -13,6 +13,7 @@ from .db import (
     Alert, Deployment, DeliveryAttempt, Endpoint, Integration, Tripwire,
 )
 from .models import iso_now
+from .services.secrets_crypto import pack_config, unpack_config
 
 
 def _id(prefix: str) -> str:
@@ -352,7 +353,7 @@ def upsert_integration(db: Session, *, plugin: str, kind: str,
     if row is None:
         try:
             row = Integration(plugin=plugin, kind=kind, configured=True,
-                              config_json=json.dumps(config))
+                              config_json=pack_config(config))
             db.add(row)
             db.commit()
             db.refresh(row)
@@ -363,7 +364,7 @@ def upsert_integration(db: Session, *, plugin: str, kind: str,
             db.rollback()
             row = db.query(Integration).filter(Integration.plugin == plugin).first()
     row.configured = True
-    row.config_json = json.dumps(config)
+    row.config_json = pack_config(config)
     db.commit()
     db.refresh(row)
     return row

@@ -15,6 +15,7 @@ import httpx
 
 from thumper.plugins.base import AlertPlugin, PluginError
 from thumper.services.signing import sign_timestamped
+from thumper.services.ssrf import assert_url_allowed
 
 
 def _now_unix() -> int:
@@ -27,6 +28,7 @@ class Plugin(AlertPlugin):
         url = self.config.get("url")
         if not url:
             raise PluginError("webhook: url is required")
+        assert_url_allowed(url)  # SSRF guard (#74)
 
         # Stamp send-time before serializing so the signed timestamp reflects when
         # the alert fired, not when JSON encoding happened to finish.

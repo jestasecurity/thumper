@@ -21,13 +21,14 @@
 # needed to plant bait in a system path like /etc/ssh.
 #
 # Read detection:
-#   • Primary : FIFO named-pipe bait (unprivileged). The agent serves bait content
-#               to any opener; `open(O_WRONLY)` blocks until a reader connects, so
-#               every read is a guaranteed, synchronous event. Works on macOS and
-#               Linux without elevated privileges.
-#   • Fallback : st_atime poll (when mkfifo is unavailable on the state-dir fs).
-#               Best-effort only — many systems update atime lazily or not at all,
-#               so this can miss reads and yields no process/user attribution.
+#   • macOS : FIFO named-pipe bait (unprivileged). The agent serves bait content
+#             to any opener; `open(O_WRONLY)` blocks until a reader connects, so
+#             every read is a guaranteed, synchronous event. No elevated privileges.
+#   • Linux : `inotifywait` IN_ACCESS on the bait files (reliable, unprivileged).
+#             inotify reports the event but not the accessing process, so alerts
+#             are path-only (no process/pid/user). Needs the inotify-tools package.
+#   • else  : st_atime poll fallback. Best-effort only - many systems update atime
+#             lazily or not at all, so this can miss reads. Last resort.
 #
 # Example (the shape an MDM/SSH deploy pushes):
 #   sh thumper_agent.sh run \
@@ -56,9 +57,11 @@ FIFO_MODE=0
 BAITCACHE=""
 REPLANTED=0
 probe_fifo_mode() {
-    command -v mkfifo >/dev/null 2>&1 || { FIFO_MODE=0; return; }
+    FIFO_MODE=0
+    [ "$(platform)" = "darwin" ] || return    # FIFO sensor is macOS-only; Linux uses inotify
+    command -v mkfifo >/dev/null 2>&1 || return
     _probe="$(dirname "$STATE_FILE")/.fifoprobe.$$"
-    if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; FIFO_MODE=1; else FIFO_MODE=0; fi
+    if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; FIFO_MODE=1; fi
     unset _probe
 }
 cache_path() { printf '%s/%s' "$BAITCACHE" "$1"; }   # cache_path <deployment-id>
@@ -117,6 +120,19 @@ lock_holder_alive() {
         && ps -p "$oldpid" -o command= 2>/dev/null | grep -q thumper_agent
 }
 
+# Another agent already watches this install location (the singleton). Don't start
+# a second watcher - instead register our tripwire(s) with the server so the
+# running agent plants them on its next live-sync (#12). Enroll is idempotent
+# (same machine_id -> same endpoint + token), so this is safe even for an
+# accidental identical re-run.
+register_with_running_agent() {
+    log "another agent is already running (pid $oldpid); registering tripwires for it"
+    [ "$FORCE" = 1 ] || preflight_paths || exit 1
+    do_enroll || { err "enroll failed"; exit 1; }
+    log "registered; the running agent will plant on its next sync (<=${SYNC_INTERVAL}s)"
+    exit 0
+}
+
 acquire_singleton() {
     LOCK_DIR="$(dirname "$STATE_FILE")/agent.lock"
     mkdir -p "$(dirname "$LOCK_DIR")"             # ensure the state dir exists
@@ -127,8 +143,7 @@ acquire_singleton() {
             return 0
         fi
         if lock_holder_alive; then
-            log "another agent is already running (pid $oldpid); exiting"
-            exit 0
+            register_with_running_agent
         fi
         err "clearing stale lock (holder '${oldpid:-?}' is not a live agent)"
         rm -rf "$LOCK_DIR"
@@ -138,8 +153,7 @@ acquire_singleton() {
     # Sustained contention: a peer keeps winning the mkdir. Defer to it if it's a
     # live agent rather than killing a legitimately-needed start.
     if lock_holder_alive; then
-        log "another agent is already running (pid $oldpid); exiting"
-        exit 0
+        register_with_running_agent
     fi
     err "could not acquire singleton lock"; exit 1
 }
@@ -426,6 +440,7 @@ heartbeat_loop() {
             kill -USR1 "$MAIN_PID" 2>/dev/null
             return
         fi
+        log "heartbeat succeeded"
     done
 }
 
@@ -473,6 +488,48 @@ dep_index_for_line() {  # echo the deployment index whose path appears in the li
 }
 
 is_noise()   { for n in $NOISE_PROCS; do [ "$n" = "$1" ] && return 0; done; return 1; }
+
+watch_inotify() {
+    # Linux read sensor: inotify IN_ACCESS fires on read. `%w` is the watched
+    # path. inotify gives no accessing process, so process/pid/user are empty
+    # (path-only alerts, handled like the atime fallback). Works unprivileged.
+    command -v inotifywait >/dev/null 2>&1 || return 1
+    set --
+    i=1
+    while [ "$i" -le "$DEP_COUNT" ]; do
+        eval "p=\$dep_path_$i"
+        set -- "$@" "$p"
+        i=$((i + 1))
+    done
+    log "watching $DEP_COUNT bait file(s) via inotify (path-only; no process/user)"
+    # Do NOT swallow inotifywait's stderr: if it can't start, or dies at runtime
+    # (e.g. fs.inotify.max_user_watches exhaustion), we want that in the log. A
+    # silently-dark sensor looks exactly like "no one touched the bait", which is
+    # the worst possible failure for a tripwire. -q already keeps normal startup
+    # quiet, so only real errors reach the log here.
+    inotifywait -m -q -e access --format '%w' -- "$@" | while read -r path; do
+        idx=""
+        j=1
+        while [ "$j" -le "$DEP_COUNT" ]; do
+            eval "wp=\$dep_path_$j"
+            [ "$wp" = "$path" ] && { idx=$j; break; }
+            j=$((j + 1))
+        done
+        [ -n "$idx" ] || continue
+        now=$(date +%s)
+        eval "last=\$dep_last_$idx"
+        [ $((now - last)) -lt "$DEBOUNCE_SECS" ] && continue
+        eval "dep_last_$idx=\$now"
+        fire "$idx" "access" "" "" "" "$path"
+    done
+    # Reached only when inotifywait exited on its own. If the stop was deliberate
+    # (reconcile/shutdown set the flag), stay quiet - stop_watcher is tearing this
+    # subshell down anyway. Otherwise the real sensor just died: say so loudly and
+    # degrade to the atime poll so we keep *some* coverage rather than going blind.
+    [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+    err "inotify watcher exited unexpectedly - degrading to atime poll"
+    watch_atime
+}
 
 watch_atime() {
     log "mkfifo unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
@@ -561,11 +618,17 @@ watch_fifo() {  # supervisor: one serve_fifo per bait, wait on them
     i=1
     while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & i=$((i + 1)); done
     wait
+    [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+    err "FIFO watcher exited unexpectedly - degrading to atime poll"
+    watch_atime
 }
 
 start_watcher() {  # launch the right sensor in the background; set WATCH_PID
+    rm -f "${WATCH_STOP_FLAG:-}" 2>/dev/null || true   # this start is not a stop
     if [ "$FIFO_MODE" = 1 ]; then
         watch_fifo &
+    elif [ "$(platform)" = "linux" ] && command -v inotifywait >/dev/null 2>&1; then
+        watch_inotify &
     else
         watch_atime &
     fi
@@ -574,9 +637,10 @@ start_watcher() {  # launch the right sensor in the background; set WATCH_PID
 
 stop_watcher() {  # kill the watcher AND its serve_fifo children
     [ -n "${WATCH_PID:-}" ] || return 0
-    # Reap children FIRST. Killing the parent subshell first makes the kernel
-    # reparent serve_fifo children to PID 1, after which `pkill -P "$WATCH_PID"`
-    # matches nothing and leaks serving loops on every reconcile.
+    : > "${WATCH_STOP_FLAG:-/dev/null}" 2>/dev/null || true  # mark stop deliberate
+    # Reap children FIRST. Killing the parent subshell first reparents the
+    # serve_fifo / inotifywait children to PID 1, after which `pkill -P` matches
+    # nothing and leaks them on every reconcile.
     pkill -P "$WATCH_PID" 2>/dev/null || true
     kill "$WATCH_PID" 2>/dev/null || true
     WATCH_PID=""
@@ -679,9 +743,10 @@ run() {
     STATE_FILE=${STATE_FILE:-$DEFAULT_STATE}
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
+    WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
     mkdir -p "$(dirname "$STATE_FILE")"
     probe_fifo_mode
-    [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait" || log "sensor: atime poll (mkfifo unavailable)"
+    [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait (macOS)"
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).

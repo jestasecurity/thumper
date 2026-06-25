@@ -176,7 +176,7 @@ export default function TripwireDetail() {
                     <td className="muted">
                       {d.last_triggered ? timeAgo(d.last_triggered) : "-"}
                     </td>
-                    <td><DeployBadge state={d.state} triggered={d.triggered_count} /></td>
+                    <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} /></td>
                   </tr>
                 ))}
               </tbody>
