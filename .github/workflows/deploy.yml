@@ -20,7 +20,7 @@ jobs:
           repositories: workflows
 
       - name: Dispatch deploy to workflows repo
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
           repository: jestasecurity/workflows
