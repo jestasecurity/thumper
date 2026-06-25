@@ -10,6 +10,7 @@ Two distinct contracts live here:
 import hmac
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
@@ -56,6 +57,7 @@ router = APIRouter(prefix="/api")
 log = logging.getLogger("thumper.api")
 
 _STALE_WINDOW = timedelta(minutes=15)
+_last_ephemeral_prune = 0.0
 _INACTIVE_WINDOW = timedelta(hours=12)
 
 
@@ -295,7 +297,11 @@ def build_install_for_set(tripwire: list[str] = Query(default=[]),
 # ── endpoints ────────────────────────────────────────────────────────────────
 @router.get("/endpoints", response_model=list[EndpointOut])
 def list_endpoints(db: Session = Depends(get_db)):
-    store.prune_stale_ephemeral(db)
+    global _last_ephemeral_prune
+    _now = time.monotonic()
+    if _now - _last_ephemeral_prune > 60:
+        store.prune_stale_ephemeral(db)
+        _last_ephemeral_prune = _now
     deployed = store.deployment_counts_by_endpoint(db)
     triggered = store.alert_counts_by_endpoint(db)
     return [_endpoint_out(db, endpoint,

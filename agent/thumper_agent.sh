@@ -754,6 +754,7 @@ run() {
     fi
 
     start_watcher
+    [ "$EPHEMERAL" = 1 ] && : > "$(dirname "$STATE_FILE")/ready" 2>/dev/null || true
 
     # No live sync: behave as before - block on the watcher.
     if ! [ "$SYNC_INTERVAL" -gt 0 ] 2>/dev/null; then

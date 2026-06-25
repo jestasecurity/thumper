@@ -200,7 +200,15 @@ def test_prune_falls_back_to_enrolled_at_when_last_seen_null(client_db):
 # ── API-layer prune integration tests ────────────────────────────────────────
 
 def test_get_endpoints_does_not_list_stale_ephemeral(client_db):
-    """GET /api/endpoints lazily sweeps stale ephemerals before returning."""
+    """GET /api/endpoints lazily sweeps stale ephemerals before returning.
+
+    The prune is throttled to once per 60s (module-level timestamp). Reset it
+    before this test so the first GET always triggers a sweep regardless of
+    what other tests ran before in the same process.
+    """
+    import thumper.api.routes as _routes
+    _routes._last_ephemeral_prune = 0.0
+
     tc, db = client_db
     # Stale ephemeral
     ep_stale = store.enroll_endpoint(db, hostname="ci-dead", platform="linux",

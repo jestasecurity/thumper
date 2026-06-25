@@ -21,6 +21,8 @@ function wfCmd(cmd, msg) { process.stdout.write(`::${cmd}::${msg}\n`); }
 function error(msg)   { wfCmd('error', msg); }
 function warning(msg) { wfCmd('warning', msg); }
 
+if (enrollTok) { process.stdout.write(`::add-mask::${enrollTok}\n`); }
+
 if (!server)    { error('thumper: input "server" is required');       process.exit(1); }
 if (!enrollTok) { error('thumper: input "enroll-token" is required'); process.exit(1); }
 if (!tripwires) { error('thumper: input "tripwires" is required');     process.exit(1); }
@@ -50,6 +52,7 @@ function fetchAgent(serverUrl, destPath) {
       }
       const out = fs.createWriteStream(destPath);
       res.pipe(out);
+      res.on('error', reject);
       out.on('finish', () => {
         out.close();
         try { fs.chmodSync(destPath, 0o755); } catch (_) {}
@@ -101,12 +104,14 @@ function spawnAgent() {
     '--state-file', stateFile,
   ];
 
-  console.log(`[thumper] spawning agent: sh ${args.join(' ')}`);
+  console.log(`[thumper] spawning agent: watching ${tripwires} on ${server}`);
   const child = spawn('sh', args, {
     detached: true,
     stdio: 'ignore',
   });
+  child.on('error', (err) => { error(`thumper: agent failed to spawn: ${err.message}`); process.exit(1); });
   child.unref();
+  if (!child.pid) { error('thumper: agent failed to start (no pid)'); process.exit(1); }
   const agentPid = child.pid;
   console.log(`[thumper] agent spawned (pid ${agentPid})`);
   return agentPid;
@@ -118,6 +123,16 @@ function spawnAgent() {
     await fetchAgent(server, agentPath);
     ensureInotify();
     const pid = spawnAgent();
+
+    const readyFile = path.join(stateDir, 'ready');
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    let ready = false;
+    for (let i = 0; i < 40; i++) {                 // up to ~20s
+      if (fs.existsSync(readyFile)) { ready = true; break; }
+      await sleep(500);
+    }
+    if (!ready) warning('thumper: agent did not signal ready within 20s; bait may not be planted yet — protection for early steps is not guaranteed');
+    else console.log('[thumper] agent ready; bait planted and watching');
 
     // Persist state for post.js — written to a file in stateDir so no
     // GITHUB_STATE parsing is needed; post.js just reads this JSON.

@@ -8,6 +8,9 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 
+const _sab = new Int32Array(new SharedArrayBuffer(4));
+const sleepMs = (ms) => { try { Atomics.wait(_sab, 0, 0, ms); } catch (_) {} };
+
 function wfCmd(cmd, msg) { process.stdout.write(`::${cmd}::${msg}\n`); }
 function error(msg)   { wfCmd('error', msg); }
 
@@ -37,7 +40,7 @@ if (pid) {
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
       try { process.kill(pid, 0); } catch (_) { break; }  // 0 = liveness probe
-      // busy-wait is fine: this is in post.js on a GH runner, not a hot loop
+      sleepMs(100);
     }
   } catch (err) {
     // ESRCH = no such process (already exited); anything else is unexpected but non-fatal.
