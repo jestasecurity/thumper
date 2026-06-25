@@ -88,6 +88,7 @@ class EndpointOut(BaseModel):
     status: str               # online | stale | inactive
     deployment_count: int
     triggered_count: int
+    ephemeral: bool = False
 
 
 # ── alerts ───────────────────────────────────────────────────────────────────

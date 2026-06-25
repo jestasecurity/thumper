@@ -66,20 +66,24 @@ def delete_tripwire(db: Session, tid: str) -> bool:
 
 # ── endpoints ────────────────────────────────────────────────────────────────
 def enroll_endpoint(db: Session, *, hostname: str, platform: Optional[str],
-                    machine_id: str) -> Endpoint:
-    """Upsert by machine_id. Returns the endpoint row (incl. agent_token)."""
+                    machine_id: str, ephemeral: bool = False) -> Endpoint:
+    """Upsert by machine_id. Returns the endpoint row (incl. agent_token).
+
+    ephemeral=True marks a short-lived CI endpoint (issue #3): enrolled by the
+    GitHub Action on job start and removed/pruned when the job ends."""
     existing = db.query(Endpoint).filter(Endpoint.machine_id == machine_id).first()
     now = iso_now()
     if existing:
         existing.hostname = hostname
         existing.platform = platform
         existing.last_seen = now
+        existing.ephemeral = 1 if ephemeral else 0
         db.commit()
         db.refresh(existing)
         return existing
     row = Endpoint(id=_id("ep"), hostname=hostname, platform=platform,
                    machine_id=machine_id, agent_token=secrets.token_hex(16),
-                   enrolled_at=now, last_seen=now)
+                   enrolled_at=now, last_seen=now, ephemeral=1 if ephemeral else 0)
     db.add(row)
     db.commit()
     db.refresh(row)

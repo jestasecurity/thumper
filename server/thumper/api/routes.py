@@ -157,6 +157,7 @@ def _endpoint_out(db, endpoint, *, deployment_count=None, triggered_count=None) 
         status=_endpoint_status_full(endpoint),
         deployment_count=deployment_count,
         triggered_count=triggered_count,
+        ephemeral=bool(endpoint.ephemeral),
     )
 
 
@@ -609,7 +610,8 @@ async def enroll(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(401, "invalid enroll token")
     endpoint = store.enroll_endpoint(db, hostname=field("hostname"),
                                      platform=field("platform") or None,
-                                     machine_id=field("machine_id"))
+                                     machine_id=field("machine_id"),
+                                     ephemeral=field("ephemeral") == "1")
     # Materialize a unique instance for each tripwire this install is scoped to.
     for tid in [t.strip() for t in field("tripwire_ids").split(",") if t.strip()]:
         tripwire = store.get_tripwire(db, tid)
