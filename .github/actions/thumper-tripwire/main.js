@@ -28,13 +28,20 @@ if (!enrollTok) { error('thumper: input "enroll-token" is required'); process.ex
 if (!tripwires) { error('thumper: input "tripwires" is required');     process.exit(1); }
 
 // ── state dir ─────────────────────────────────────────────────────────────────
+// mkdtempSync creates a unique, 0700 directory atomically. A predictable name
+// in the temp dir (esp. the os.tmpdir() fallback) is a symlink/race target -
+// and we download + EXECUTE the agent under here, so it must be ours alone.
 const runnerTemp = process.env['RUNNER_TEMP'] || os.tmpdir();
-const stateDir   = path.join(runnerTemp, 'thumper');
+const stateDir   = fs.mkdtempSync(path.join(runnerTemp, 'thumper-'));
 const agentPath  = path.join(stateDir, 'thumper_agent.sh');
 const stateFile  = path.join(stateDir, 'agent.json');
 const actionState = path.join(stateDir, 'action-state.json');
 
-fs.mkdirSync(stateDir, { recursive: true });
+// Hand the randomized state path to post.js via GITHUB_STATE (it can no longer
+// guess a fixed path); post.js reads it from process.env.STATE_actionState.
+if (process.env['GITHUB_STATE']) {
+  fs.appendFileSync(process.env['GITHUB_STATE'], `actionState=${actionState}\n`);
+}
 console.log(`[thumper] state dir: ${stateDir}`);
 
 // ── fetch agent from server ──────────────────────────────────────────────────

@@ -16,8 +16,10 @@ function error(msg)   { wfCmd('error', msg); }
 
 // ── locate action-state.json ──────────────────────────────────────────────────
 const runnerTemp  = process.env['RUNNER_TEMP'] || os.tmpdir();
-const stateDir    = path.join(runnerTemp, 'thumper');
-const actionState = path.join(stateDir, 'action-state.json');
+const stateDir    = path.join(runnerTemp, 'thumper');  // legacy fallback dir
+// main.js hands us the randomized state path via GITHUB_STATE; fall back to the
+// old fixed path for older runs / tests that don't set it.
+const actionState = process.env['STATE_actionState'] || path.join(stateDir, 'action-state.json');
 
 let state;
 try {
