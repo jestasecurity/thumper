@@ -354,6 +354,7 @@ resync() {
 
 fire() {  # fire <i> <event_type> <process> <pid> <os_user> <accessed_path>
     FIRE_RETRIED=0
+    [ "${EPHEMERAL:-0}" = "1" ] && touch "$(dirname "$STATE_FILE")/triggered" 2>/dev/null || true
     _fire "$@"
 }
 
