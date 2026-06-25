@@ -58,8 +58,8 @@ BAITCACHE=""
 REPLANTED=0
 probe_fifo_mode() {
     FIFO_MODE=0
-    [ "$(platform)" = "darwin" ] || return    # FIFO sensor is macOS-only; Linux uses inotify
-    command -v mkfifo >/dev/null 2>&1 || return
+    [ "$(platform)" = "darwin" ] || return 0  # FIFO sensor is macOS-only; Linux uses inotify
+    command -v mkfifo >/dev/null 2>&1 || return 0
     _probe="$(dirname "$STATE_FILE")/.fifoprobe.$$"
     if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; FIFO_MODE=1; fi
     unset _probe
