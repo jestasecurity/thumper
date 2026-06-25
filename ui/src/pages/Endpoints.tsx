@@ -33,7 +33,7 @@ export default function Endpoints() {
                   <th>Platform</th>
                   <th>Enrolled</th>
                   <th>Last seen</th>
-                  <th>Instances</th>
+                  <th>Tripwires</th>
                   <th>Triggers</th>
                   <th>Status</th>
                 </tr>
