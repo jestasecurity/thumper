@@ -132,6 +132,93 @@ def test_enroll_route_ephemeral_zero_does_not_set_flag(client_db):
     assert ep.ephemeral == 0
 
 
+# ── prune_stale_ephemeral store-layer tests ───────────────────────────────────
+# iso_now() format: "%Y-%m-%dT%H:%M:%SZ"  (e.g. "2026-06-22T10:00:00Z")
+# We set last_seen directly to avoid sleeps and get deterministic cutoffs.
+
+_OLD_TS = "2020-01-01T00:00:00Z"   # clearly older than any TTL
+_NEW_TS = "2099-12-31T23:59:59Z"   # clearly in the future → always "recent"
+
+
+def test_prune_stale_ephemeral_removes_old_ephemeral(client_db):
+    """Stale ephemeral endpoint (old last_seen) → pruned; count 1; row gone."""
+    _, db = client_db
+    ep = store.enroll_endpoint(db, hostname="ci-stale", platform="linux",
+                               machine_id="m-stale-1", ephemeral=True)
+    ep.last_seen = _OLD_TS
+    db.commit()
+
+    count = store.prune_stale_ephemeral(db, older_than_seconds=3600)
+
+    assert count == 1
+    assert store.get_endpoint(db, ep.id) is None
+
+
+def test_prune_stale_ephemeral_keeps_recent_ephemeral(client_db):
+    """Recent ephemeral endpoint → not pruned."""
+    _, db = client_db
+    ep = store.enroll_endpoint(db, hostname="ci-fresh", platform="linux",
+                               machine_id="m-fresh-1", ephemeral=True)
+    ep.last_seen = _NEW_TS
+    db.commit()
+
+    count = store.prune_stale_ephemeral(db, older_than_seconds=3600)
+
+    assert count == 0
+    assert store.get_endpoint(db, ep.id) is not None
+
+
+def test_prune_stale_ephemeral_never_touches_non_ephemeral(client_db):
+    """Old non-ephemeral endpoint → never pruned, regardless of age."""
+    _, db = client_db
+    ep = store.enroll_endpoint(db, hostname="prod-old", platform="linux",
+                               machine_id="m-prod-old-1", ephemeral=False)
+    ep.last_seen = _OLD_TS
+    db.commit()
+
+    count = store.prune_stale_ephemeral(db, older_than_seconds=3600)
+
+    assert count == 0
+    assert store.get_endpoint(db, ep.id) is not None
+
+
+def test_prune_falls_back_to_enrolled_at_when_last_seen_null(client_db):
+    """NULL last_seen: falls back to enrolled_at; old enrolled_at → pruned."""
+    _, db = client_db
+    ep = store.enroll_endpoint(db, hostname="ci-null-ls", platform="linux",
+                               machine_id="m-null-ls-1", ephemeral=True)
+    ep.last_seen = None
+    ep.enrolled_at = _OLD_TS
+    db.commit()
+
+    count = store.prune_stale_ephemeral(db, older_than_seconds=3600)
+
+    assert count == 1
+    assert store.get_endpoint(db, ep.id) is None
+
+
+# ── API-layer prune integration tests ────────────────────────────────────────
+
+def test_get_endpoints_does_not_list_stale_ephemeral(client_db):
+    """GET /api/endpoints lazily sweeps stale ephemerals before returning."""
+    tc, db = client_db
+    # Stale ephemeral
+    ep_stale = store.enroll_endpoint(db, hostname="ci-dead", platform="linux",
+                                     machine_id="m-dead-1", ephemeral=True)
+    ep_stale.last_seen = _OLD_TS
+    # Normal endpoint (should survive)
+    ep_normal = store.enroll_endpoint(db, hostname="prod-box", platform="linux",
+                                      machine_id="m-normal-1", ephemeral=False)
+    ep_normal.last_seen = _OLD_TS
+    db.commit()
+
+    body = tc.get("/api/endpoints").json()
+
+    ids = [e["id"] for e in body]
+    assert ep_stale.id not in ids, "stale ephemeral must be pruned before listing"
+    assert ep_normal.id in ids, "non-ephemeral must survive even when old"
+
+
 # ── migration import test ─────────────────────────────────────────────────────
 
 def test_migration_imports_cleanly():

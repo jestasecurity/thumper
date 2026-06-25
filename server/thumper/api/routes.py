@@ -295,6 +295,7 @@ def build_install_for_set(tripwire: list[str] = Query(default=[]),
 # ── endpoints ────────────────────────────────────────────────────────────────
 @router.get("/endpoints", response_model=list[EndpointOut])
 def list_endpoints(db: Session = Depends(get_db)):
+    store.prune_stale_ephemeral(db)
     deployed = store.deployment_counts_by_endpoint(db)
     triggered = store.alert_counts_by_endpoint(db)
     return [_endpoint_out(db, endpoint,

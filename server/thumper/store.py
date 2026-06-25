@@ -3,6 +3,7 @@ the app deals in ORM model instances (attribute access: row.id, row.name, …).
 """
 import json
 import secrets
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import distinct, func
@@ -119,6 +120,32 @@ def request_decommission(db: Session, eid: str) -> Optional[Endpoint]:
         ep.decommission_requested_at = iso_now()
         db.commit()
     return ep
+
+
+def prune_stale_ephemeral(db: Session, older_than_seconds: int = 3600) -> int:
+    """Delete ephemeral endpoints not seen within older_than_seconds. Sweeps
+    CI per-job endpoints left behind by cancelled jobs that skipped cleanup.
+    Non-ephemeral endpoints are never touched. Returns the count removed."""
+    cutoff = datetime.now(timezone.utc).timestamp() - older_than_seconds
+    candidates = db.query(Endpoint).filter(Endpoint.ephemeral == 1).all()
+    _FMT = "%Y-%m-%dT%H:%M:%SZ"
+    removed = 0
+    for ep in candidates:
+        raw = ep.last_seen or ep.enrolled_at
+        if not raw:
+            # No timestamp at all — treat as infinitely old; prune it.
+            delete_endpoint(db, ep.id)
+            removed += 1
+            continue
+        try:
+            ts = datetime.strptime(raw, _FMT).replace(tzinfo=timezone.utc)
+        except ValueError:
+            # Unparseable timestamp: skip rather than silently prune everything.
+            continue
+        if ts.timestamp() < cutoff:
+            delete_endpoint(db, ep.id)
+            removed += 1
+    return removed
 
 
 def delete_endpoint(db: Session, eid: str) -> bool:
