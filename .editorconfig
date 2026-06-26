@@ -11,9 +11,11 @@ indent_style = space
 indent_size = 4
 
 [*.{ts,tsx,js,jsx,json,yml,yaml,css}]
+indent_style = space
 indent_size = 2
 
 [*.sh]
+indent_style = space
 indent_size = 4
 
 [*.md]
