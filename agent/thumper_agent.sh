@@ -56,6 +56,8 @@ LAST_RESYNC=0
 FIFO_MODE=0
 BAITCACHE=""
 REPLANTED=0
+LEDGER_PID=""
+LEDGER_FILE=""
 probe_fifo_mode() {
     FIFO_MODE=0
     [ "$(platform)" = "darwin" ] || return 0  # FIFO sensor is macOS-only; Linux uses inotify
@@ -392,12 +394,17 @@ fire() {  # fire <i> <event_type> <process> <pid> <os_user> <accessed_path>
 # the read that triggered us still alerts under fresh credentials.
 _fire() {
     eval "id=\$dep_id_$1 secret=\$dep_secret_$1 callback=\$dep_callback_$1 path=\$dep_path_$1"
-    event_type=$2; process=$3; pid=$4; os_user=$5; accessed_path=${6:-$path}
+    event_type=$2; process=$3; pid=$4; os_user=$5; accessed_path=${6:-$path}; suspects=${7:-}
     summary=${process:-unknown}
     [ -n "$pid" ] && summary="$summary (pid $pid)"
     ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     body=$(printf 'deployment_id=%s\nevent_type=%s\nprocess=%s\npid=%s\nos_user=%s\naccessed_path=%s\ntriggered_by=%s\ntimestamp=%s' \
         "$id" "$event_type" "$process" "$pid" "$os_user" "$accessed_path" "$summary" "$ts")
+    # Best-effort suspect shortlist for detection-only (atime) trips. A new line,
+    # HMAC-covered like the rest; the server ignores unknown keys until it stores
+    # them. Omitted entirely when empty so other events' bodies are unchanged.
+    [ -n "$suspects" ] && body="$body
+suspects=$suspects"
     sig=$(hmac_sha256 "$secret" "$body")
     # No -f: we want to read the HTTP status (401) instead of just a curl failure.
     code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$callback" \
@@ -412,7 +419,7 @@ _fire() {
                 # path against the refreshed deployment set.
                 new_idx=$(dep_index_for_line "$accessed_path") || {
                     err "callback REJECTED - path not deployed after re-enroll ($summary)"; return 0; }
-                _fire "$new_idx" "$event_type" "$process" "$pid" "$os_user" "$accessed_path"
+                _fire "$new_idx" "$event_type" "$process" "$pid" "$os_user" "$accessed_path" "$suspects"
             else
                 err "callback REJECTED (401) ($summary)"
             fi ;;
@@ -542,6 +549,34 @@ arm_atime() {  # arm_atime <path>: set atime to the past so the next read bumps 
 read_atime() {  # read_atime <path>: portable access-time epoch (GNU %X first, then BSD %a - never %a on Linux, that's free blocks: #28)
     stat -c %X "$1" 2>/dev/null || stat -f %a "$1" 2>/dev/null || echo 0
 }
+
+# Churn ledger (#124): the atime sensor is detection-only. This sidecar records
+# the first-seen epoch + command of every live process, so on an atime trip we
+# can attach a best-effort SUSPECT SHORTLIST (recently-spawned processes around
+# the read). It is a shortlist, NOT a definitive pid - it CAPTURES the reader
+# (validated) without falsely claiming a single one. Only runs in atime mode.
+LEDGER_INTERVAL=1
+churn_ledger() {  # background: maintain "<pid> <first-seen-epoch> <comm>" per live pid
+    [ -n "${LEDGER_FILE:-}" ] || return 0
+    : > "$LEDGER_FILE"
+    while :; do
+        now=$(date +%s)
+        ps -axo pid=,comm= 2>/dev/null | awk -v now="$now" -v led="$LEDGER_FILE" '
+            BEGIN { while ((getline l < led) > 0) { split(l, f, " "); seen[f[1]]=f[2] } close(led) }
+            { pid=$1; $1=""; sub(/^[ \t]+/, ""); comm=$0; sub(/.*\//, "", comm); gsub(/[ ,:\t]/, "_", comm)
+              if (!(pid in seen)) seen[pid]=now; cm[pid]=comm; alive[pid]=1 }
+            END { for (p in alive) printf "%s %s %s\n", p, seen[p], cm[p] }
+        ' > "$LEDGER_FILE.tmp" 2>/dev/null && mv "$LEDGER_FILE.tmp" "$LEDGER_FILE" 2>/dev/null
+        sleep "$LEDGER_INTERVAL"
+    done
+}
+suspects_at() {  # suspects_at <epoch>: "comm:pid,..." for procs first seen within (POLL+10)s before <epoch>
+    [ -f "${LEDGER_FILE:-/nonexistent}" ] || return 0
+    awk -v cut=$(( $1 - POLL - 10 )) -v me="$$" '
+        $1 != me && $2 >= cut { printf "%s:%s,", $3, $1 }
+    ' "$LEDGER_FILE" 2>/dev/null | sed 's/,$//'
+}
+
 watch_atime() {
     log "atime poll every ${POLL}s on regular-file bait (re-armable; detection only - no process/user)"
     i=1
@@ -558,7 +593,8 @@ watch_atime() {
             eval "p=\$dep_path_$i prev=\$atime_$i"
             cur=$(read_atime "$p")
             if [ "$cur" != "0" ] && [ "$cur" -gt "$prev" ] 2>/dev/null; then
-                fire "$i" "atime-change" "" "" "" "$p"
+                sus=$(suspects_at "$(date +%s)")        # best-effort reader shortlist (no definitive pid)
+                fire "$i" "atime-change" "" "" "" "$p" "$sus"
                 arm_atime "$p"                          # RE-ARM so the NEXT read is detectable too
                 eval "atime_$i=\$(read_atime \"\$p\")"
             fi
@@ -639,6 +675,7 @@ watch_fifo() {  # supervisor: one serve_fifo per bait, wait on them
 start_watcher() {  # launch the right sensor in the background; set WATCH_PID
     rm -f "${WATCH_STOP_FLAG:-}" 2>/dev/null || true   # this start is not a stop
     if [ "$SENSOR" = atime ]; then
+        [ -z "$LEDGER_PID" ] && { churn_ledger & LEDGER_PID=$!; }  # suspect-shortlist sidecar (persists across reconciles)
         watch_atime &                                   # forced atime sensor (any platform)
     elif [ "$FIFO_MODE" = 1 ]; then
         watch_fifo &
@@ -659,6 +696,13 @@ stop_watcher() {  # kill the watcher AND its serve_fifo children
     pkill -P "$WATCH_PID" 2>/dev/null || true
     kill "$WATCH_PID" 2>/dev/null || true
     WATCH_PID=""
+}
+
+stop_ledger() {  # kill the churn-ledger sidecar (persists across watcher restarts; dies at exit)
+    [ -n "${LEDGER_PID:-}" ] || return 0
+    pkill -P "$LEDGER_PID" 2>/dev/null || true
+    kill "$LEDGER_PID" 2>/dev/null || true
+    LEDGER_PID=""
 }
 
 remove_fifos() {  # remove every manifest path that is a FIFO (clean exit / startup sweep)
@@ -759,6 +803,7 @@ run() {
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
     WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
+    LEDGER_FILE="$(dirname "$STATE_FILE")/churn.ledger"
     mkdir -p "$(dirname "$STATE_FILE")"
     if [ "$SENSOR" = atime ]; then
         FIFO_MODE=0; log "sensor: atime poll (regular-file bait, re-armable)"
@@ -811,8 +856,8 @@ run() {
     # release the singleton lock. Combined into one trap (replacing the release-
     # only trap set after acquire_singleton) so none clobbers the others.
     cleanup_heartbeat() { [ -n "$HEARTBEAT_PID" ] && kill "$HEARTBEAT_PID" 2>/dev/null; }
-    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton; exit 0' INT TERM
-    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton' EXIT
+    trap 'stop_watcher; stop_ledger; remove_fifos; cleanup_heartbeat; release_singleton; exit 0' INT TERM
+    trap 'stop_watcher; stop_ledger; remove_fifos; cleanup_heartbeat; release_singleton' EXIT
     # Remote kill: the heartbeat loop raises USR1 when the server flags us.
     trap 'self_destruct' USR1
 
