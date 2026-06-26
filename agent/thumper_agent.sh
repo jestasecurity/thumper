@@ -40,6 +40,7 @@
 set -eu
 
 DEFAULT_STATE="$HOME/.thumper/agent.json"
+AGENT_VERSION="0.1.0"
 READ_OPS="open read RdData pread readlink mmap"
 # macOS background daemons that legitimately touch files (indexing/backup/security).
 NOISE_PROCS="fs_usage sh bash thumper_agent curl mds mds_stores mdworker mdworker_shared mdbulkimport mdflagwriter mdsync fseventsd backupd tccd syspolicyd XProtect XprotectService quicklookd Spotlight mdiagnosticd"
@@ -775,9 +776,11 @@ run() {
 }
 
 # ── arg parsing (POSIX) ───────────────────────────────────────────────────────
-usage() {
-    cat >&2 <<EOF
+usage_text() {
+    cat <<EOF
 usage: thumper_agent.sh run --server URL --enroll-token TOKEN [options]
+  --help, -h           print this help and exit
+  --version            print the agent version and exit
   --tripwire ID        tripwire to apply (repeatable)
   --state-file PATH    state file (default: $DEFAULT_STATE)
   --poll SECONDS       atime fallback poll interval (default: 5)
@@ -787,15 +790,31 @@ usage: thumper_agent.sh run --server URL --enroll-token TOKEN [options]
   --simulate           fire a signed callback for each deployment, then exit
   --force              overwrite a path even if a file we didn't plant is there
 EOF
-    exit 2
+}
+
+usage() {
+    code=${1:-2}
+    if [ "$code" = 0 ]; then
+        usage_text
+    else
+        usage_text >&2
+    fi
+    exit "$code"
 }
 
 SERVER=""; ENROLL_TOKEN=""; TRIPWIRES=""; STATE_FILE=""; POLL=5; HEARTBEAT=60; SYNC_INTERVAL=300; ONCE=0; SIMULATE=0; FORCE=0
+
+case "${1:-}" in
+    --help|-h) usage 0 ;;
+    --version) printf '%s\n' "$AGENT_VERSION"; exit 0 ;;
+esac
 
 [ "${1:-}" = "run" ] || usage
 shift
 while [ $# -gt 0 ]; do
     case "$1" in
+        --help|-h)      usage 0 ;;
+        --version)      printf '%s\n' "$AGENT_VERSION"; exit 0 ;;
         --server)       SERVER=$2; shift 2 ;;
         --enroll-token) ENROLL_TOKEN=$2; shift 2 ;;
         --tripwire)     TRIPWIRES="${TRIPWIRES:+$TRIPWIRES,}$2"; shift 2 ;;
