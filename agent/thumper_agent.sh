@@ -531,12 +531,24 @@ watch_inotify() {
     watch_atime
 }
 
+# atime sensor helpers. Detection-only (no process/user) but works on a NORMAL
+# regular-file bait under all constraints (no kdebug, no mount, no privilege),
+# so it's the primary layer that covers the FIFO sensor's blind spots
+# (statSync-guarded / mmap / scan-only readers). See #28, #100.
+ATIME_ARM_STAMP=200001010000   # `touch -t` stamp: 2000-01-01 00:00 - atime far in the past
+arm_atime() {  # arm_atime <path>: set atime to the past so the next read bumps it (relatime/APFS)
+    touch -a -t "$ATIME_ARM_STAMP" "$1" 2>/dev/null || true
+}
+read_atime() {  # read_atime <path>: portable access-time epoch (GNU %X first, then BSD %a - never %a on Linux, that's free blocks: #28)
+    stat -c %X "$1" 2>/dev/null || stat -f %a "$1" 2>/dev/null || echo 0
+}
 watch_atime() {
-    log "mkfifo unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
+    log "atime poll every ${POLL}s on regular-file bait (re-armable; detection only - no process/user)"
     i=1
     while [ "$i" -le "$DEP_COUNT" ]; do
         eval "p=\$dep_path_$i"
-        eval "atime_$i=\$(stat -c %X \"\$p\" 2>/dev/null || stat -f %a \"\$p\" 2>/dev/null || echo 0)"
+        arm_atime "$p"                                  # arm so relatime bumps atime on a read
+        eval "atime_$i=\$(read_atime \"\$p\")"
         i=$((i + 1))
     done
     while true; do
@@ -544,10 +556,11 @@ watch_atime() {
         i=1
         while [ "$i" -le "$DEP_COUNT" ]; do
             eval "p=\$dep_path_$i prev=\$atime_$i"
-            cur=$(stat -c %X "$p" 2>/dev/null || stat -f %a "$p" 2>/dev/null || echo 0)
+            cur=$(read_atime "$p")
             if [ "$cur" != "0" ] && [ "$cur" -gt "$prev" ] 2>/dev/null; then
-                eval "atime_$i=\$cur"
                 fire "$i" "atime-change" "" "" "" "$p"
+                arm_atime "$p"                          # RE-ARM so the NEXT read is detectable too
+                eval "atime_$i=\$(read_atime \"\$p\")"
             fi
             i=$((i + 1))
         done
@@ -625,7 +638,9 @@ watch_fifo() {  # supervisor: one serve_fifo per bait, wait on them
 
 start_watcher() {  # launch the right sensor in the background; set WATCH_PID
     rm -f "${WATCH_STOP_FLAG:-}" 2>/dev/null || true   # this start is not a stop
-    if [ "$FIFO_MODE" = 1 ]; then
+    if [ "$SENSOR" = atime ]; then
+        watch_atime &                                   # forced atime sensor (any platform)
+    elif [ "$FIFO_MODE" = 1 ]; then
         watch_fifo &
     elif [ "$(platform)" = "linux" ] && command -v inotifywait >/dev/null 2>&1; then
         watch_inotify &
@@ -745,8 +760,12 @@ run() {
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
     WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
     mkdir -p "$(dirname "$STATE_FILE")"
-    probe_fifo_mode
-    [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait (macOS)"
+    if [ "$SENSOR" = atime ]; then
+        FIFO_MODE=0; log "sensor: atime poll (regular-file bait, re-armable)"
+    else
+        probe_fifo_mode
+        [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait (macOS)"
+    fi
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
@@ -841,7 +860,9 @@ usage() {
 usage: thumper_agent.sh run --server URL --enroll-token TOKEN [options]
   --tripwire ID        tripwire to apply (repeatable)
   --state-file PATH    state file (default: $DEFAULT_STATE)
-  --poll SECONDS       atime fallback poll interval (default: 5)
+  --poll SECONDS       atime poll interval (default: 5)
+  --sensor MODE        read sensor: auto|fifo|atime (default: auto). atime plants a
+                       regular-file bait + re-armable atime tripwire (no pid)
   --heartbeat SECONDS  heartbeat interval; 0 to disable (default: 60)
   --sync-interval SECS re-pull deployments + reconcile every SECS (default: 300, 0 disables)
   --once               enroll + plant, then exit
@@ -851,7 +872,7 @@ EOF
     exit 2
 }
 
-SERVER=""; ENROLL_TOKEN=""; TRIPWIRES=""; STATE_FILE=""; POLL=5; HEARTBEAT=60; SYNC_INTERVAL=300; ONCE=0; SIMULATE=0; FORCE=0
+SERVER=""; ENROLL_TOKEN=""; TRIPWIRES=""; STATE_FILE=""; POLL=5; HEARTBEAT=60; SYNC_INTERVAL=300; ONCE=0; SIMULATE=0; FORCE=0; SENSOR=auto
 
 [ "${1:-}" = "run" ] || usage
 shift
@@ -864,6 +885,7 @@ while [ $# -gt 0 ]; do
         --poll)         POLL=$2; shift 2 ;;
         --heartbeat)    HEARTBEAT=$2; shift 2 ;;
         --sync-interval) SYNC_INTERVAL=$2; shift 2 ;;
+        --sensor)       SENSOR=$2; shift 2 ;;
         --once)         ONCE=1; shift ;;
         --simulate)     SIMULATE=1; shift ;;
         --force)        FORCE=1; shift ;;
@@ -871,6 +893,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -n "$SERVER" ] && [ -n "$ENROLL_TOKEN" ] || usage
+case "$SENSOR" in auto|fifo|atime) ;; *) err "invalid --sensor: $SENSOR (want auto|fifo|atime)"; usage ;; esac
 
 for tool in curl openssl; do
     command -v "$tool" >/dev/null 2>&1 || { err "$tool is required"; exit 1; }
