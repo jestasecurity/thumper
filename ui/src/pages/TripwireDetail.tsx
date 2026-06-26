@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError } from "../api";
 import type { TripwireDetail as TD } from "../api";
-import { CopyField, DeployBadge, Modal, TypeTag, Topbar, timeAgo } from "../components/ui.tsx";
+import { api, ApiError } from "../api";
+import { CopyField, DeployBadge, Modal, timeAgo, Topbar, TypeTag } from "../components/ui.tsx";
 import { Pencil, Trash2 } from "lucide-react";
+import PageTitle from "../components/PageTitle.tsx";
 
 export default function TripwireDetail() {
   const { id = "" } = useParams();
@@ -97,6 +98,7 @@ export default function TripwireDetail() {
 
   return (
     <>
+      <PageTitle title={tw.name} />
       <Topbar
         title={tw.name}
         action={

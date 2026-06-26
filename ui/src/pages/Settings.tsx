@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
 import type { AppSettings } from "../api";
+import { api } from "../api";
 import { Topbar } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 export default function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const PAGE_TITLE = "Settings";
 
   useEffect(() => {
     api.getSettings().then(setSettings);
@@ -14,7 +16,8 @@ export default function Settings() {
 
   return (
     <>
-      <Topbar title="Settings" />
+      <PageTitle title={PAGE_TITLE} />
+      <Topbar title={PAGE_TITLE} />
       <div className="content">
         <p className="muted" style={{ marginTop: 0 }}>
           Read-only view of the current server configuration.
