@@ -21,16 +21,13 @@ export default function Tripwires() {
   const PAGE_TITLE = "Tripwires";
 
   const load = () => api.listTripwires().then(setTripwires);
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   async function saveRename() {
     if (!renaming) return;
     const name = draft.trim();
     if (!name) return;
-    setBusy(true);
-    setActionErr(null);
+    setBusy(true); setActionErr(null);
     try {
       await api.renameTripwire(renaming.id, name);
       setRenaming(null);
@@ -44,8 +41,7 @@ export default function Tripwires() {
 
   async function confirmDelete() {
     if (!deleting) return;
-    setBusy(true);
-    setActionErr(null);
+    setBusy(true); setActionErr(null);
     try {
       await api.deleteTripwire(deleting.id);
       setDeleting(null);
@@ -98,9 +94,9 @@ export default function Tripwires() {
       <div className="content">
         <div className="card">
           {selected.size > 0 && (
-            <div className="row" style={{justifyContent: "space-between", marginBottom: 12}}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
               <span className="muted">{selected.size} selected</span>
-              <span className="row" style={{gap: 8}}>
+              <span className="row" style={{ gap: 8 }}>
                 <button className="btn primary" onClick={build}>
                   Build install command
                 </button>
@@ -114,12 +110,12 @@ export default function Tripwires() {
           {error && <div className="empty">{error}</div>}
 
           {install && (
-            <div style={{marginBottom: 16}}>
+            <div style={{ marginBottom: 16 }}>
               <div className="step-label">
                 Install command for {install.tripwire_ids.length} tripwire
                 {install.tripwire_ids.length === 1 ? "" : "s"}
               </div>
-              <p className="muted" style={{marginTop: 0}}>
+              <p className="muted" style={{ marginTop: 0 }}>
                 Run it on the machines you choose - paste it on a box, or push it via your MDM /
                 SSH. One agent self-enrolls and plants + watches all selected tripwires.{" "}
                 <code>sudo</code> is required (macOS <code>fs_usage</code>).
@@ -133,54 +129,46 @@ export default function Tripwires() {
           ) : (
             <table>
               <thead>
-              <tr>
-                <th style={{width: 28}}></th>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Path</th>
-                <th>Source</th>
-                <th>Created</th>
-                <th>Endpoints</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
+                <tr>
+                  <th style={{ width: 28 }}></th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Path</th>
+                  <th>Source</th>
+                  <th>Created</th>
+                  <th>Endpoints</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
-              {tripwires.map((t) => (
-                <tr key={t.id} className="clickable-row" onClick={() => nav(`/tripwires/${t.id}`)}>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      aria-label={`select ${t.name}`}
-                      checked={selected.has(t.id)}
-                      onChange={() => toggle(t.id)}
-                    />
-                  </td>
-                  <td>{t.name}</td>
-                  <td><TypeTag type={t.token_type} /></td>
-                  <td className="path">{t.path}</td>
-                  <td className="muted">{t.source}</td>
-                  <td className="muted">{timeAgo(t.created_at)}</td>
-                  <td>{t.deployed_count}</td>
-                  <td><TripwireBadge deployed={t.deployed_count} triggered={t.triggered_count} /></td>
-                  <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                    <button className="btn-icon" title="Rename" onClick={() => {
-                      setDraft(t.name);
-                      setActionErr(null);
-                      setRenaming(t);
-                    }}>
-                      <Pencil size={14} />
-                    </button>
-                    <button className="btn-icon danger" title="Delete" onClick={() => {
-                      setConfirmName("");
-                      setActionErr(null);
-                      setDeleting(t);
-                    }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                {tripwires.map((t) => (
+                  <tr key={t.id} className="clickable-row" onClick={() => nav(`/tripwires/${t.id}`)}>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`select ${t.name}`}
+                        checked={selected.has(t.id)}
+                        onChange={() => toggle(t.id)}
+                      />
+                    </td>
+                    <td>{t.name}</td>
+                    <td><TypeTag type={t.token_type} /></td>
+                    <td className="path">{t.path}</td>
+                    <td className="muted">{t.source}</td>
+                    <td className="muted">{timeAgo(t.created_at)}</td>
+                    <td>{t.deployed_count}</td>
+                    <td><TripwireBadge deployed={t.deployed_count} triggered={t.triggered_count} /></td>
+                    <td className="row-actions" onClick={(e) => e.stopPropagation()}>
+                      <button className="btn-icon" title="Rename" onClick={() => { setDraft(t.name); setActionErr(null); setRenaming(t); }}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="btn-icon danger" title="Delete" onClick={() => { setConfirmName(""); setActionErr(null); setDeleting(t); }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
@@ -188,10 +176,7 @@ export default function Tripwires() {
       </div>
 
       {renaming && (
-        <Modal onClose={() => {
-          setRenaming(null);
-          setActionErr(null);
-        }}>
+        <Modal onClose={() => { setRenaming(null); setActionErr(null); }}>
           <div className="card-head"><h2>Rename tripwire</h2></div>
           <div className="field">
             <label>Name</label>
@@ -200,32 +185,19 @@ export default function Tripwires() {
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveRename();
-                if (e.key === "Escape") {
-                  setRenaming(null);
-                  setActionErr(null);
-                }
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") { setRenaming(null); setActionErr(null); } }}
             />
           </div>
           {actionErr && <p className="danger-text">{actionErr}</p>}
-          <div className="row" style={{gap: 8}}>
+          <div className="row" style={{ gap: 8 }}>
             <button className="btn primary" onClick={saveRename} disabled={!draft.trim() || busy}>Save</button>
-            <button className="btn" onClick={() => {
-              setRenaming(null);
-              setActionErr(null);
-            }}>Cancel
-            </button>
+            <button className="btn" onClick={() => { setRenaming(null); setActionErr(null); }}>Cancel</button>
           </div>
         </Modal>
       )}
 
       {deleting && (
-        <Modal onClose={() => {
-          setDeleting(null);
-          setActionErr(null);
-        }}>
+        <Modal onClose={() => { setDeleting(null); setActionErr(null); }}>
           <div className="card-head"><h2>Delete tripwire</h2></div>
           <p className="modal-intro">
             This removes <strong>{deleting.name}</strong> from all endpoints - the planted bait
@@ -238,21 +210,13 @@ export default function Tripwires() {
               autoFocus
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && confirmName === deleting.name) confirmDelete();
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter" && confirmName === deleting.name) confirmDelete(); }}
             />
           </div>
           {actionErr && <p className="danger-text">{actionErr}</p>}
-          <div className="row" style={{gap: 8}}>
-            <button className="btn danger" onClick={confirmDelete}
-                    disabled={confirmName !== deleting.name || busy}>Delete
-            </button>
-            <button className="btn" onClick={() => {
-              setDeleting(null);
-              setActionErr(null);
-            }}>Cancel
-            </button>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn danger" onClick={confirmDelete} disabled={confirmName !== deleting.name || busy}>Delete</button>
+            <button className="btn" onClick={() => { setDeleting(null); setActionErr(null); }}>Cancel</button>
           </div>
         </Modal>
       )}

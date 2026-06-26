@@ -19,7 +19,7 @@ export default function Settings() {
       <PageTitle title={PAGE_TITLE} />
       <Topbar title={PAGE_TITLE} />
       <div className="content">
-        <p className="muted" style={{marginTop: 0}}>
+        <p className="muted" style={{ marginTop: 0 }}>
           Read-only view of the current server configuration.
         </p>
 

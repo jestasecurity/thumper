@@ -7,7 +7,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import PageTitle from "../components/PageTitle.tsx";
 
 export default function TripwireDetail() {
-  const {id = ""} = useParams();
+  const { id = "" } = useParams();
   const nav = useNavigate();
   const [tw, setTw] = useState<TD | null>(null);
   const [distributing, setDistributing] = useState(false);
@@ -34,8 +34,7 @@ export default function TripwireDetail() {
   async function saveRename() {
     const name = draft.trim();
     if (!name) return;
-    setBusy(true);
-    setActionErr(null);
+    setBusy(true); setActionErr(null);
     try {
       await api.renameTripwire(id, name);
       setRenaming(false);
@@ -48,8 +47,7 @@ export default function TripwireDetail() {
   }
 
   async function confirmDelete() {
-    setBusy(true);
-    setActionErr(null);
+    setBusy(true); setActionErr(null);
     try {
       await api.deleteTripwire(id);
       nav("/tripwires");
@@ -90,11 +88,7 @@ export default function TripwireDetail() {
       <div className="content">
         <div className="empty">
           {loadErr}{" "}
-          <button className="btn" onClick={() => {
-            setLoadErr(null);
-            load();
-          }}>Retry
-          </button>
+          <button className="btn" onClick={() => { setLoadErr(null); load(); }}>Retry</button>
           {" "}<Link to="/tripwires">← All tripwires</Link>
         </div>
       </div>
@@ -108,19 +102,11 @@ export default function TripwireDetail() {
       <Topbar
         title={tw.name}
         action={
-          <span className="row" style={{gap: 8}}>
-            <button className="btn" onClick={() => {
-              setDraft(tw.name);
-              setActionErr(null);
-              setRenaming(true);
-            }}>
+          <span className="row" style={{ gap: 8 }}>
+            <button className="btn" onClick={() => { setDraft(tw.name); setActionErr(null); setRenaming(true); }}>
               <Pencil size={14} /> Rename
             </button>
-            <button className="btn danger" onClick={() => {
-              setConfirmName("");
-              setActionErr(null);
-              setConfirming(true);
-            }}>
+            <button className="btn danger" onClick={() => { setConfirmName(""); setActionErr(null); setConfirming(true); }}>
               <Trash2 size={14} /> Delete
             </button>
           </span>
@@ -128,7 +114,7 @@ export default function TripwireDetail() {
       />
       <div className="content">
         <div className="card">
-          <div className="row" style={{gap: 10, marginBottom: 12}}>
+          <div className="row" style={{ gap: 10, marginBottom: 12 }}>
             <TypeTag type={tw.token_type} />
             <span className="path">{tw.path}</span>
             <span className="muted">source: {tw.source}</span>
@@ -136,14 +122,14 @@ export default function TripwireDetail() {
           </div>
 
           {tw.token && (
-            <div style={{marginBottom: 20}}>
+            <div style={{ marginBottom: 20 }}>
               <div className="step-label">Honeytoken</div>
               <pre className="code-block">{tw.token}</pre>
             </div>
           )}
 
           <div className="step-label">Deploy this tripwire</div>
-          <p className="muted" style={{marginTop: 0}}>
+          <p className="muted" style={{ marginTop: 0 }}>
             Run the command below on the machines you choose - paste it on a box, or push it
             via your MDM / SSH / Ansible. It's self-bootstrapping: it downloads the agent,
             self-enrolls, and starts watching. Each machine gets its <strong>own unique</strong>{" "}
@@ -152,7 +138,7 @@ export default function TripwireDetail() {
             scope - Thumper doesn't manage groups.
           </p>
           <CopyField value={tw.install.command} />
-          <div className="row" style={{marginTop: 12}}>
+          <div className="row" style={{ marginTop: 12 }}>
             <button className="btn primary" onClick={distribute} disabled={distributing}>
               {distributing ? "Distributing…" : "Distribute via integrations"}
             </button>
@@ -173,29 +159,28 @@ export default function TripwireDetail() {
           ) : (
             <table>
               <thead>
-              <tr>
-                <th>Endpoint</th>
-                <th>Instance</th>
-                <th>Planted</th>
-                <th>Last triggered</th>
-                <th>Status</th>
-              </tr>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Instance</th>
+                  <th>Planted</th>
+                  <th>Last triggered</th>
+                  <th>Status</th>
+                </tr>
               </thead>
               <tbody>
-              {tw.deployments.map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    <Link to={`/endpoints/${d.endpoint_id}`}>{d.endpoint_hostname}</Link>
-                  </td>
-                  <td className="path">{d.id}</td>
-                  <td className="muted">{timeAgo(d.created_at)}</td>
-                  <td className="muted">
-                    {d.last_triggered ? timeAgo(d.last_triggered) : "-"}
-                  </td>
-                  <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} />
-                  </td>
-                </tr>
-              ))}
+                {tw.deployments.map((d) => (
+                  <tr key={d.id}>
+                    <td>
+                      <Link to={`/endpoints/${d.endpoint_id}`}>{d.endpoint_hostname}</Link>
+                    </td>
+                    <td className="path">{d.id}</td>
+                    <td className="muted">{timeAgo(d.created_at)}</td>
+                    <td className="muted">
+                      {d.last_triggered ? timeAgo(d.last_triggered) : "-"}
+                    </td>
+                    <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} /></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
@@ -203,10 +188,7 @@ export default function TripwireDetail() {
       </div>
 
       {renaming && (
-        <Modal onClose={() => {
-          setRenaming(false);
-          setActionErr(null);
-        }}>
+        <Modal onClose={() => { setRenaming(false); setActionErr(null); }}>
           <div className="card-head">
             <h2>Rename tripwire</h2>
           </div>
@@ -217,32 +199,19 @@ export default function TripwireDetail() {
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveRename();
-                if (e.key === "Escape") {
-                  setRenaming(false);
-                  setActionErr(null);
-                }
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter") saveRename(); if (e.key === "Escape") { setRenaming(false); setActionErr(null); } }}
             />
           </div>
           {actionErr && <p className="danger-text">{actionErr}</p>}
-          <div className="row" style={{gap: 8}}>
+          <div className="row" style={{ gap: 8 }}>
             <button className="btn primary" onClick={saveRename} disabled={!draft.trim() || busy}>Save</button>
-            <button className="btn" onClick={() => {
-              setRenaming(false);
-              setActionErr(null);
-            }}>Cancel
-            </button>
+            <button className="btn" onClick={() => { setRenaming(false); setActionErr(null); }}>Cancel</button>
           </div>
         </Modal>
       )}
 
       {confirming && (
-        <Modal onClose={() => {
-          setConfirming(false);
-          setActionErr(null);
-        }}>
+        <Modal onClose={() => { setConfirming(false); setActionErr(null); }}>
           <div className="card-head">
             <h2>Delete tripwire</h2>
           </div>
@@ -257,20 +226,13 @@ export default function TripwireDetail() {
               autoFocus
               value={confirmName}
               onChange={(e) => setConfirmName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && confirmName === tw.name) confirmDelete();
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter" && confirmName === tw.name) confirmDelete(); }}
             />
           </div>
           {actionErr && <p className="danger-text">{actionErr}</p>}
-          <div className="row" style={{gap: 8}}>
-            <button className="btn danger" onClick={confirmDelete} disabled={confirmName !== tw.name || busy}>Delete
-            </button>
-            <button className="btn" onClick={() => {
-              setConfirming(false);
-              setActionErr(null);
-            }}>Cancel
-            </button>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn danger" onClick={confirmDelete} disabled={confirmName !== tw.name || busy}>Delete</button>
+            <button className="btn" onClick={() => { setConfirming(false); setActionErr(null); }}>Cancel</button>
           </div>
         </Modal>
       )}

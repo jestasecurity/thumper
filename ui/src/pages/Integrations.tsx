@@ -22,14 +22,14 @@ export default function Integrations() {
   }, []);
 
   async function test(name: string) {
-    setTesting((t) => ({...t, [name]: true}));
+    setTesting((t) => ({ ...t, [name]: true }));
     try {
       const res = await api.testIntegration(name);
-      setResults((r) => ({...r, [name]: res}));
+      setResults((r) => ({ ...r, [name]: res }));
     } catch (e) {
-      setResults((r) => ({...r, [name]: {ok: false, error: (e as Error).message, tested_at: ""}}));
+      setResults((r) => ({ ...r, [name]: { ok: false, error: (e as Error).message, tested_at: "" } }));
     } finally {
-      setTesting((t) => ({...t, [name]: false}));
+      setTesting((t) => ({ ...t, [name]: false }));
       await load(); // refresh the persisted badge
     }
   }
@@ -38,7 +38,7 @@ export default function Integrations() {
     if (!window.confirm(`Remove the ${label} integration? Its saved config will be deleted.`)) return;
     await api.deleteIntegration(name);
     setResults((r) => {
-      const next = {...r};
+      const next = { ...r };
       delete next[name];
       return next;
     });
@@ -50,7 +50,7 @@ export default function Integrations() {
   const stateOf = (name: string) => integrations.find((i) => i.plugin === name);
   const COMING_SOON = new Set(["mdm", "ssh", "splunk"]);
 
-  function StatusBadge({st}: { st?: Integration }) {
+  function StatusBadge({ st }: { st?: Integration }) {
     if (!st?.configured) {
       return (
         <span className="badge pending">
@@ -80,7 +80,7 @@ export default function Integrations() {
     );
   }
 
-  function Section({title, sub, plugins}: { title: string; sub: string; plugins: PluginManifest[] }) {
+  function Section({ title, sub, plugins }: { title: string; sub: string; plugins: PluginManifest[] }) {
     return (
       <div className="card">
         <div className="card-head">
@@ -93,28 +93,28 @@ export default function Integrations() {
           return (
             <div className={`integration-row ${soon ? "disabled" : ""}`} key={m.name} title={soon ? "Coming soon" : ""}>
               <div>
-                <div className="row" style={{gap: 8}}>
+                <div className="row" style={{ gap: 8 }}>
                   <strong>{m.display_name}</strong>
                   {soon ? <span className="soon">soon</span> : <StatusBadge st={st} />}
                 </div>
-                <div className="muted" style={{marginTop: 4}}>
+                <div className="muted" style={{ marginTop: 4 }}>
                   {m.description}
                 </div>
                 {st?.configured && (
-                  <div className="path" style={{marginTop: 6}}>
+                  <div className="path" style={{ marginTop: 6 }}>
                     {Object.entries(st.config).map(([k, v]) => `${k}=${v}`).join("  ")}
                   </div>
                 )}
                 {results[m.name] && (
                   <div
                     className={results[m.name].ok ? "muted" : "danger-text"}
-                    style={{marginTop: 6}}
+                    style={{ marginTop: 6 }}
                   >
                     {results[m.name].ok ? "✓ Connected" : `✗ ${results[m.name].error}`}
                   </div>
                 )}
               </div>
-              <div className="row" style={{gap: 8}}>
+              <div className="row" style={{ gap: 8 }}>
                 {st?.configured && m.kind === "alert" && (
                   <button
                     className="btn"
@@ -147,7 +147,7 @@ export default function Integrations() {
       <PageTitle title={PAGE_TITLE} />
       <Topbar title={PAGE_TITLE} />
       <div className="content">
-        <p className="muted" style={{marginTop: 0}}>
+        <p className="muted" style={{ marginTop: 0 }}>
           Plugins are auto-loaded from <span className="path">/plugins/deploy</span> and{" "}
           <span className="path">/plugins/alert</span>. Each renders its own config form from its
           manifest - drop in a module to add Ansible, Splunk, PagerDuty, and more. See{" "}
@@ -196,11 +196,11 @@ const SAMPLE_ALERT = {
 };
 
 function ConfigModal({
-                       manifest,
-                       current,
-                       onClose,
-                       onSaved,
-                     }: {
+  manifest,
+  current,
+  onClose,
+  onSaved,
+}: {
   manifest: PluginManifest;
   current?: Integration;
   onClose: () => void;
@@ -232,8 +232,8 @@ function ConfigModal({
     crypto.getRandomValues(bytes);
     const secret = btoa(String.fromCharCode(...bytes))
       .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-    setValues((v) => ({...v, [key]: secret}));
-    setRevealed((r) => ({...r, [key]: true})); // show what was just generated
+    setValues((v) => ({ ...v, [key]: secret }));
+    setRevealed((r) => ({ ...r, [key]: true })); // show what was just generated
   }
 
   async function copyKey(key: string) {
@@ -245,7 +245,7 @@ function ConfigModal({
       setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
     } catch {
       /* clipboard blocked (non-secure context) - leave the value visible to copy by hand */
-      setRevealed((r) => ({...r, [key]: true}));
+      setRevealed((r) => ({ ...r, [key]: true }));
     }
   }
 
@@ -259,7 +259,7 @@ function ConfigModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="card modal-card"
-        style={{width: 480}}
+        style={{ width: 480 }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="card-head">
@@ -281,7 +281,7 @@ function ConfigModal({
                 type={f.type === "secret" && !revealed[f.key] ? "password" : "text"}
                 placeholder={secretKept ? "•••••• - leave blank to keep current" : f.placeholder}
                 value={values[f.key] ?? ""}
-                onChange={(e) => setValues({...values, [f.key]: e.target.value})}
+                onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
               />
               {f.generate && (
                 <div className="row field-actions">
@@ -300,7 +300,7 @@ function ConfigModal({
                     <button
                       type="button"
                       className="btn small"
-                      onClick={() => setRevealed((r) => ({...r, [f.key]: !r[f.key]}))}
+                      onClick={() => setRevealed((r) => ({ ...r, [f.key]: !r[f.key] }))}
                     >
                       {revealed[f.key] ? "Hide" : "Show"}
                     </button>
@@ -325,7 +325,7 @@ function ConfigModal({
             </div>
           </div>
         )}
-        <div className="row" style={{marginTop: 6}}>
+        <div className="row" style={{ marginTop: 6 }}>
           <button className="btn primary" disabled={saving || missingRequired} onClick={save}>
             {saving ? "Saving…" : "Save"}
           </button>

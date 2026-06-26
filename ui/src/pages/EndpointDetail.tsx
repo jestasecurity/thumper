@@ -6,7 +6,7 @@ import { api, ApiError } from "../api";
 import { DeployBadge, EndpointBadge, timeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
-function Modal({children, onClose}: { children: React.ReactNode; onClose: () => void }) {
+function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="card modal-card" onClick={(e) => e.stopPropagation()}>
@@ -17,7 +17,7 @@ function Modal({children, onClose}: { children: React.ReactNode; onClose: () => 
 }
 
 export default function EndpointDetail() {
-  const {id = ""} = useParams();
+  const { id = "" } = useParams();
   const [ep, setEp] = useState<ED | null>(null);
   const [tripwires, setTripwires] = useState<Tripwire[]>([]);
   const [showPicker, setShowPicker] = useState(false);
@@ -44,11 +44,9 @@ export default function EndpointDetail() {
 
   useEffect(() => {
     if (!showPicker) return;
-
     function close(e: MouseEvent) {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setShowPicker(false);
     }
-
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [showPicker]);
@@ -70,11 +68,7 @@ export default function EndpointDetail() {
       <div className="content">
         <div className="empty">
           {loadErr}{" "}
-          <button className="btn" onClick={() => {
-            setLoadErr(null);
-            reload();
-          }}>Retry
-          </button>
+          <button className="btn" onClick={() => { setLoadErr(null); reload(); }}>Retry</button>
           {" "}<Link to="/endpoints">← All endpoints</Link>
         </div>
       </div>
@@ -108,7 +102,7 @@ export default function EndpointDetail() {
         title={ep.hostname}
         action={
           decommissioning ? (
-            <span className="row" style={{gap: 10, alignItems: "center"}}>
+            <span className="row" style={{ gap: 10, alignItems: "center" }}>
               <span className="muted">decommissioning…</span>
               <button className="btn danger" disabled={busy} onClick={() => setConfirm("force")}>
                 Force remove
@@ -123,7 +117,7 @@ export default function EndpointDetail() {
       />
       <div className="content">
         <div className="card">
-          <div className="row" style={{gap: 10}}>
+          <div className="row" style={{ gap: 10 }}>
             <EndpointBadge status={ep.status} />
             <span className="muted">{ep.platform ?? "unknown platform"}</span>
             <span className="muted">enrolled {timeAgo(ep.enrolled_at)}</span>
@@ -134,7 +128,7 @@ export default function EndpointDetail() {
         <div className="card">
           <div className="card-head">
             <h2>Tripwires ({ep.deployments.length})</h2>
-            <div style={{position: "relative"}} ref={pickerRef}>
+            <div style={{ position: "relative" }} ref={pickerRef}>
               <button
                 className="btn primary"
                 disabled={busy}
@@ -162,7 +156,7 @@ export default function EndpointDetail() {
                       <div className="picker-divider" />
                     </>
                   )}
-                  <Link to="/tripwires/new" className="picker-item" style={{color: "var(--accent)"}}>
+                  <Link to="/tripwires/new" className="picker-item" style={{ color: "var(--accent)" }}>
                     + Create new tripwire
                   </Link>
                 </div>
@@ -177,38 +171,37 @@ export default function EndpointDetail() {
           ) : (
             <table>
               <thead>
-              <tr>
-                <th>Tripwire</th>
-                <th>Instance</th>
-                <th>Planted</th>
-                <th>Last triggered</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
+                <tr>
+                  <th>Tripwire</th>
+                  <th>Instance</th>
+                  <th>Planted</th>
+                  <th>Last triggered</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
               </thead>
               <tbody>
-              {ep.deployments.map((d) => (
-                <tr key={d.id}>
-                  <td>
-                    <Link to={`/tripwires/${d.tripwire_id}`}>{nameOf(d.tripwire_id)}</Link>
-                  </td>
-                  <td className="path">{d.id}</td>
-                  <td className="muted">{timeAgo(d.created_at)}</td>
-                  <td className="muted">{d.last_triggered ? timeAgo(d.last_triggered) : "-"}</td>
-                  <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} />
-                  </td>
-                  <td>
-                    <button
-                      className="btn-icon danger"
-                      title="Remove"
-                      disabled={busy}
-                      onClick={() => setRemoving({tripwireId: d.tripwire_id, name: nameOf(d.tripwire_id)})}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                {ep.deployments.map((d) => (
+                  <tr key={d.id}>
+                    <td>
+                      <Link to={`/tripwires/${d.tripwire_id}`}>{nameOf(d.tripwire_id)}</Link>
+                    </td>
+                    <td className="path">{d.id}</td>
+                    <td className="muted">{timeAgo(d.created_at)}</td>
+                    <td className="muted">{d.last_triggered ? timeAgo(d.last_triggered) : "-"}</td>
+                    <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} /></td>
+                    <td>
+                      <button
+                        className="btn-icon danger"
+                        title="Remove"
+                        disabled={busy}
+                        onClick={() => setRemoving({ tripwireId: d.tripwire_id, name: nameOf(d.tripwire_id) })}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
@@ -222,12 +215,11 @@ export default function EndpointDetail() {
             Tell <strong>{ep.hostname}</strong> to self-destruct? On its next check-in the agent
             unplants all its bait, removes itself, and disappears from the dashboard. This can't be undone.
           </p>
-          <div className="row" style={{gap: 8}}>
+          <div className="row" style={{ gap: 8 }}>
             <button className="btn danger" onClick={() => {
               setConfirm(null);
               act(() => api.decommissionEndpoint(id));
-            }}>Decommission
-            </button>
+            }}>Decommission</button>
             <button className="btn" onClick={() => setConfirm(null)}>Cancel</button>
           </div>
         </Modal>
@@ -241,15 +233,11 @@ export default function EndpointDetail() {
             agent to confirm. Use this only for a dead/offline machine - any bait already planted
             there will stay until cleaned up manually.
           </p>
-          <div className="row" style={{gap: 8}}>
+          <div className="row" style={{ gap: 8 }}>
             <button className="btn danger" onClick={() => {
               setConfirm(null);
-              act(async () => {
-                await api.removeEndpoint(id);
-                nav("/endpoints");
-              });
-            }}>Force remove
-            </button>
+              act(async () => { await api.removeEndpoint(id); nav("/endpoints"); });
+            }}>Force remove</button>
             <button className="btn" onClick={() => setConfirm(null)}>Cancel</button>
           </div>
         </Modal>
@@ -262,13 +250,12 @@ export default function EndpointDetail() {
             Remove <strong>{removing.name}</strong> from <strong>{ep.hostname}</strong>?
             The planted bait will be unplanted on the next agent sync.
           </p>
-          <div className="row" style={{gap: 8}}>
+          <div className="row" style={{ gap: 8 }}>
             <button className="btn danger" onClick={() => {
               const tid = removing.tripwireId;
               setRemoving(null);
               act(() => api.unassignTripwire(id, tid));
-            }}>Remove
-            </button>
+            }}>Remove</button>
             <button className="btn" onClick={() => setRemoving(null)}>Cancel</button>
           </div>
         </Modal>
