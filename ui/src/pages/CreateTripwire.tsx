@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
 import type { CredentialSource, TokenType, TokenTypeInfo } from "../api";
+import { api } from "../api";
 import { Topbar } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 const SOURCES: { key: CredentialSource; label: string; desc: string; soon?: boolean }[] = [
   { key: "template", label: "Generated template", desc: "A realistic fake we generate. Alerts on read." },
@@ -20,6 +21,7 @@ export default function CreateTripwire() {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const PAGE_TITLE = "Create tripwire";
 
   const info = useMemo(() => types.find((t) => t.type === type), [types, type]);
   const isRecommended = !!info && info.suggested_paths.includes(path.trim());
@@ -71,7 +73,8 @@ export default function CreateTripwire() {
 
   return (
     <>
-      <Topbar title="Create tripwire" />
+      <PageTitle title={PAGE_TITLE} />
+      <Topbar title={PAGE_TITLE} />
       <div className="content">
         {loadError && <div className="banner">⚠ {loadError}</div>}
         <div className="card">
