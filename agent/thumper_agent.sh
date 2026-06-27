@@ -558,7 +558,10 @@ watch_inotify() {
 # (statSync-guarded / mmap / scan-only readers). See #28, #100.
 ATIME_ARM_STAMP=200001010000   # `touch -t` stamp: 2000-01-01 00:00 - atime far in the past
 arm_atime() {  # arm_atime <path>: set atime to the past so the next read bumps it (relatime/APFS)
-    touch -a -t "$ATIME_ARM_STAMP" "$1" 2>/dev/null || true
+    # -c: never CREATE the file. Arming a missing bait would otherwise leave an
+    # empty file behind, making verify_planted think a failed-plant dep is planted
+    # and silently skip re-planting it (#28/#100).
+    touch -a -c -t "$ATIME_ARM_STAMP" "$1" 2>/dev/null || true
 }
 read_atime() {  # read_atime <path>: portable access-time epoch (GNU %X first, then BSD %a - never %a on Linux, that's free blocks: #28)
     stat -c %X "$1" 2>/dev/null || stat -f %a "$1" 2>/dev/null || echo 0
