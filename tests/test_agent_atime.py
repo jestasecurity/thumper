@@ -5,7 +5,7 @@ atime, the agent fires AND re-arms so the NEXT read is detectable too.
 Reads are simulated by bumping atime via os.utime(), so the test is deterministic
 regardless of the filesystem's relatime policy. Cross-platform (macOS + Linux):
 atime is the primary regular-file detection layer on both."""
-import http.server, subprocess, threading, os, time
+import http.server, subprocess, threading, os, stat, time
 from pathlib import Path
 import pytest
 
@@ -92,3 +92,32 @@ def test_atime_sensor_is_rearmable(server, tmp_path):
         assert _wait(lambda: _atime_hits() >= 2), "read #2 not detected (re-arm is broken)"
     finally:
         p.terminate(); p.wait(timeout=5)
+
+
+def test_atime_mode_does_not_hang_on_a_leftover_fifo(server, tmp_path):
+    # Roee #160 F1: a leftover FIFO from a prior FIFO run (at the bait path and in
+    # the manifest) must be SWEPT in atime mode too - else plant() `curl -o`s into
+    # a no-reader pipe and the agent hangs at startup. Without the fix this run
+    # blocks and the timeout fires.
+    bait = tmp_path / "credentials"; Stub.bait_path = str(bait)
+    os.mkfifo(bait)                                           # leftover pipe from a prior FIFO run
+    (tmp_path / "planted.list").write_text(f"{bait}\n")       # recorded as ours
+    r = subprocess.run(
+        ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{server.server_port}",
+         "--enroll-token", "e", "--tripwire", "tw_1", "--state-file", str(tmp_path / "agent.json"),
+         "--sensor", "atime", "--heartbeat", "0", "--once"],
+        capture_output=True, text=True, timeout=15)          # TimeoutExpired == the hang regressed
+    assert bait.exists() and stat.S_ISREG(bait.stat().st_mode) and not stat.S_ISFIFO(bait.stat().st_mode), \
+        "leftover FIFO was not replaced by a regular-file bait"
+
+
+def test_sensor_fifo_forces_a_named_pipe_on_any_platform(server, tmp_path):
+    # Roee #160 F3: --sensor fifo must FORCE a pipe wherever mkfifo works (incl.
+    # Linux/CI), not fall through to auto-detection (which picks inotify on Linux).
+    bait = tmp_path / "credentials"; Stub.bait_path = str(bait)
+    subprocess.run(
+        ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{server.server_port}",
+         "--enroll-token", "e", "--tripwire", "tw_1", "--state-file", str(tmp_path / "agent.json"),
+         "--sensor", "fifo", "--heartbeat", "0", "--once"],
+        capture_output=True, text=True, timeout=15)
+    assert bait.exists() and stat.S_ISFIFO(bait.stat().st_mode), "--sensor fifo did not force a named pipe"
