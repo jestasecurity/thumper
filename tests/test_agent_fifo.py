@@ -198,6 +198,34 @@ def test_duplicate_install_does_not_sweep_live_agents_fifo(server, tmp_path):
                 capture_output=True)
 
 
+def test_tampered_fifo_is_recovered(server, tmp_path):
+    # Roee #123 F1: replacing the FIFO bait with a regular file must RECOVER (rm the
+    # impostor + re-create the FIFO), not just report failed forever and go blind.
+    # Needs live-sync (--sync-interval) so verify_planted runs.
+    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
+    p = subprocess.Popen(
+        ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{server.server_port}",
+         "--enroll-token", "e", "--tripwire", "tw_1", "--state-file", str(tmp_path / "agent.json"),
+         "--heartbeat", "0", "--sync-interval", "1"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert _wait(lambda: bait.exists() and stat.S_ISFIFO(bait.stat().st_mode)), "no FIFO planted"
+        os.remove(bait); bait.write_text("attacker regular file")        # tamper: replace pipe with a file
+        assert _wait(lambda: bait.exists() and stat.S_ISFIFO(bait.stat().st_mode), timeout=15), \
+            "tampered FIFO was not recovered - sensor left permanently blind"
+    finally:
+        p.terminate(); p.wait(timeout=5)
+
+
+def test_simulate_does_not_leave_a_no_reader_fifo(server, tmp_path):
+    # Roee #123 F2: --simulate plants, fires test callbacks, exits - it must sweep
+    # its FIFOs, else a leftover no-reader pipe blocks every real open() forever.
+    bait = tmp_path / "bait_aws"; Stub.bait_path = str(bait)
+    _run(server, tmp_path, "--simulate")
+    assert not (bait.exists() and stat.S_ISFIFO(bait.stat().st_mode)), "--simulate left a no-reader FIFO"
+    assert any("simulated" in c for c in Stub.callbacks), "simulate callback did not fire"
+
+
 def test_atime_stat_order_prefers_portable_access_time():
     # #28: `stat -f %a` on Linux is statfs (free blocks), so the portable
     # `stat -c %X` must be tried FIRST. Assert BOTH call sites use the right order
