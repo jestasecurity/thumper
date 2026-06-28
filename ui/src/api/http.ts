@@ -18,6 +18,8 @@ import type {
   TripwireDetail,
 } from "./types";
 
+import { clearAdminToken, getAdminToken } from "./auth";
+
 const BASE = "/api";
 
 // Carries the HTTP status so callers can distinguish a 404 (show a not-found
@@ -33,10 +35,21 @@ export class ApiError extends Error {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: initHeaders, ...rest } = init ?? {};
+  const token = getAdminToken();
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "content-type": "application/json" },
-    ...init,
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...initHeaders,
+    },
+    ...rest,
   });
+  // 401 = missing/expired admin token → drop it and re-prompt via AdminGate.
+  if (res.status === 401) {
+    clearAdminToken();
+    window.location.reload();
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {

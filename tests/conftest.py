@@ -24,6 +24,18 @@ def _allow_local_integration_hosts(monkeypatch):
     ])
 
 
+@pytest.fixture(autouse=True)
+def _bypass_admin_auth():
+    """Admin-token auth (#20) gates the whole management API. Existing tests
+    exercise other behavior, so bypass the gate by default via a dependency
+    override. The dedicated test_admin_auth.py removes this override to test the
+    real gate."""
+    from thumper.api.routes import require_admin
+    app.dependency_overrides[require_admin] = lambda: None
+    yield
+    app.dependency_overrides.pop(require_admin, None)
+
+
 @pytest.fixture
 def client_db():
     """A TestClient wired to a fresh in-memory SQLite session, yielded together

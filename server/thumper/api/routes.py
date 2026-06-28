@@ -17,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
-from .. import store
+from .. import config, store
 from ..config import AGENT_PATH, BASE_URL, DASHBOARD_REFRESH, DB_URL, ENROLL_TOKEN, INSTALL_TOKEN
 from ..db import get_db, get_engine
 from ..models import (
@@ -52,7 +52,6 @@ from ..services.signing import verify
 from ..services.ssrf import SsrfError, assert_config_urls_allowed
 from ..tokens import TOKEN_TYPES
 
-router = APIRouter(prefix="/api")
 log = logging.getLogger("thumper.api")
 
 _STALE_WINDOW = timedelta(minutes=15)
@@ -64,6 +63,29 @@ def _token_eq(provided: str, expected: str) -> bool:
     """Constant-time token comparison (avoids a timing side-channel on the shared
     enroll/install tokens)."""
     return hmac.compare_digest(provided, expected)
+
+
+def require_admin(authorization: str = Header(default="")):
+    """Gate the management/UI API on the shared admin token (#20). Fail closed:
+    when THUMPER_ADMIN_TOKEN is unset the management API is DISABLED (503), never
+    served open. Otherwise require `Authorization: Bearer <token>` (constant-time).
+    Agent-facing routes live on `agent_router` and are NOT subject to this."""
+    expected = config.ADMIN_TOKEN
+    if not expected:
+        raise HTTPException(503, "admin API disabled: set THUMPER_ADMIN_TOKEN")
+    provided = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if not _token_eq(provided, expected):
+        raise HTTPException(401, "invalid or missing admin token")
+
+
+# Two routers, both under /api. `router` is the management/UI API and is
+# secure-by-default: every route on it requires the admin token, so a newly
+# added management endpoint is protected automatically. `agent_router` carries
+# the agent-facing endpoints, which authenticate with their own per-purpose
+# tokens (enroll/install/agent/HMAC) and must stay reachable without the admin
+# token - a route is public ONLY by explicitly opting onto agent_router.
+router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
+agent_router = APIRouter(prefix="/api")
 
 
 def _validate_bait_path(path: str) -> str:
@@ -510,7 +532,7 @@ def get_settings():
 
 
 # ── agent bootstrap: serve the agent + a self-installing script ──────────────
-@router.get("/agent/thumper_agent.sh", response_class=PlainTextResponse)
+@agent_router.get("/agent/thumper_agent.sh", response_class=PlainTextResponse)
 def serve_agent():
     try:
         return PlainTextResponse(AGENT_PATH.read_text(), media_type="text/x-shellscript")
@@ -518,7 +540,7 @@ def serve_agent():
         raise HTTPException(500, "agent script unavailable on the server")
 
 
-@router.get("/install.sh", response_class=PlainTextResponse)
+@agent_router.get("/install.sh", response_class=PlainTextResponse)
 def install_script(tripwire: list[str] = Query(default=[]), token: str = Query(default="")):
     """A self-bootstrapping installer. The tripwire's deploy command pipes this
     into `sudo sh`: it downloads the Bash agent and starts it watching as root
@@ -577,7 +599,7 @@ fi
 # registering - so a refused install leaves no endpoint in the dashboard. Returns
 # the paths one-per-line and creates nothing; gated by the enroll token like
 # /enroll. (The agent still gets its UNIQUE content/secret only after enroll.)
-@router.post("/agent/tripwire-paths", response_class=PlainTextResponse)
+@agent_router.post("/agent/tripwire-paths", response_class=PlainTextResponse)
 async def agent_tripwire_paths(request: Request, db: Session = Depends(get_db)):
     form = parse_qs((await request.body()).decode("utf-8", "replace"), keep_blank_values=True)
 
@@ -598,7 +620,7 @@ async def agent_tripwire_paths(request: Request, db: Session = Depends(get_db)):
 # ── agent: enroll ────────────────────────────────────────────────────────────
 # Agent endpoints speak plain text (key=value / TSV) so the Bash agent needs no
 # JSON parser. enroll accepts a form-encoded body (curl --data-urlencode).
-@router.post("/enroll", response_class=PlainTextResponse)
+@agent_router.post("/enroll", response_class=PlainTextResponse)
 async def enroll(request: Request, db: Session = Depends(get_db)):
     form = parse_qs((await request.body()).decode("utf-8", "replace"), keep_blank_values=True)
 
@@ -630,7 +652,7 @@ def _authed_endpoint(db, authorization: str):
 
 
 # ── agent: heartbeat (liveness only) ─────────────────────────────────────────
-@router.post("/agent/heartbeat", response_class=PlainTextResponse)
+@agent_router.post("/agent/heartbeat", response_class=PlainTextResponse)
 def agent_heartbeat(authorization: str = Header(default=""),
                     db: Session = Depends(get_db)):
     endpoint = _authed_endpoint(db, authorization)
@@ -643,7 +665,7 @@ def agent_heartbeat(authorization: str = Header(default=""),
     return PlainTextResponse("ok\n")
 
 
-@router.post("/agent/decommissioned", response_class=PlainTextResponse)
+@agent_router.post("/agent/decommissioned", response_class=PlainTextResponse)
 def agent_decommissioned(authorization: str = Header(default=""),
                          db: Session = Depends(get_db)):
     """The agent confirms it has self-destructed; drop its record (and its
@@ -663,7 +685,7 @@ def agent_decommissioned(authorization: str = Header(default=""),
 # ── agent: pull deployments ──────────────────────────────────────────────────
 # One tab-separated record per deployment. Bait `content` is NOT inlined (it can
 # be multi-line) - the agent fetches it raw from the per-deployment content URL.
-@router.get("/agent/deployments", response_class=PlainTextResponse)
+@agent_router.get("/agent/deployments", response_class=PlainTextResponse)
 def agent_deployments(authorization: str = Header(default=""),
                       db: Session = Depends(get_db)):
     endpoint = _authed_endpoint(db, authorization)
@@ -680,7 +702,7 @@ def agent_deployments(authorization: str = Header(default=""),
 
 
 # ── agent: raw bait content for one deployment ───────────────────────────────
-@router.get("/agent/deployments/{deployment_id}/content", response_class=PlainTextResponse)
+@agent_router.get("/agent/deployments/{deployment_id}/content", response_class=PlainTextResponse)
 def agent_deployment_content(deployment_id: str, authorization: str = Header(default=""),
                              db: Session = Depends(get_db)):
     endpoint = _authed_endpoint(db, authorization)
@@ -691,7 +713,7 @@ def agent_deployment_content(deployment_id: str, authorization: str = Header(def
 
 
 # ── agent: report a deployment's plant outcome ───────────────────────────────
-@router.post("/agent/deployments/{deployment_id}/state", response_class=PlainTextResponse)
+@agent_router.post("/agent/deployments/{deployment_id}/state", response_class=PlainTextResponse)
 async def agent_deployment_state(deployment_id: str, request: Request,
                                  authorization: str = Header(default=""),
                                  db: Session = Depends(get_db)):
@@ -718,7 +740,7 @@ def _parse_kv(raw: bytes) -> dict:
     return data
 
 
-@router.post("/trigger")
+@agent_router.post("/trigger")
 async def trigger(request: Request, background: BackgroundTasks,
                   db: Session = Depends(get_db)):
     body = await request.body()
