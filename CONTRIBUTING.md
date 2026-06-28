@@ -4,6 +4,7 @@
 2. Run `pip install -e ".[dev]"` and make sure `pytest -v` passes before submitting.
 3. For UI work: `cd ui && npm install && npm run dev`.
 4. For plugins, see [docs/plugins.md](docs/plugins.md).
+5. For honeytoken types, see [docs/tokens.md](docs/tokens.md).
 
 Report security vulnerabilities privately - see [SECURITY.md](SECURITY.md).
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
 import type { Integration, IntegrationTestResult, PluginManifest } from "../api";
-import { Topbar, timeAgo } from "../components/ui.tsx";
+import { api } from "../api";
+import { timeAgo, Topbar } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 export default function Integrations() {
   const [manifests, setManifests] = useState<PluginManifest[]>([]);
@@ -9,6 +10,7 @@ export default function Integrations() {
   const [editing, setEditing] = useState<string | null>(null);
   const [testing, setTesting] = useState<Record<string, boolean>>({});
   const [results, setResults] = useState<Record<string, IntegrationTestResult>>({});
+  const PAGE_TITLE = "Integrations";
 
   const load = () =>
     Promise.all([api.listManifests(), api.listIntegrations()]).then(([m, i]) => {
@@ -142,7 +144,8 @@ export default function Integrations() {
 
   return (
     <>
-      <Topbar title="Integrations" />
+      <PageTitle title={PAGE_TITLE} />
+      <Topbar title={PAGE_TITLE} />
       <div className="content">
         <p className="muted" style={{ marginTop: 0 }}>
           Plugins are auto-loaded from <span className="path">/plugins/deploy</span> and{" "}
