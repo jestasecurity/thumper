@@ -90,3 +90,24 @@ def test_mixed_sensors_plant_and_fire_together(server, tmp_path):
         assert _wait(lambda: _fired("/cb/dep_atime")), "atime bait did not fire"
     finally:
         agent.terminate(); agent.wait(timeout=5)
+
+
+def test_explicit_sensor_overrides_server_per_deployment(server, tmp_path):
+    # Roee #164 F2: an operator's explicit --sensor atime is an intentional opt-out
+    # of FIFOs; it MUST win over the server's sensor=fifo, so the bait is planted as
+    # a regular file, never a named pipe.
+    bait = tmp_path / "credentials"
+    Stub.deployments = [("dep_1", str(bait), "fifo")]   # server asks for FIFO...
+    port = server.server_port
+    agent = subprocess.Popen(
+        ["sh", str(AGENT), "run", "--server", f"http://127.0.0.1:{port}",
+         "--enroll-token", "e", "--tripwire", "tw_1", "--state-file", str(tmp_path / "agent.json"),
+         "--sensor", "atime",                            # ...operator overrides to atime
+         "--poll", "1", "--heartbeat", "0", "--sync-interval", "0"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert _wait(lambda: bait.exists()), "bait was never planted"
+        assert bait.is_file() and not stat.S_ISFIFO(bait.stat().st_mode), \
+            "--sensor atime did not override server sensor=fifo (a pipe was planted)"
+    finally:
+        agent.terminate(); agent.wait(timeout=5)

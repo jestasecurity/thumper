@@ -68,14 +68,17 @@ probe_fifo_mode() {  # AUTO policy: default to FIFO on macOS only (Linux default
     [ "$(platform)" = "darwin" ] || return 0
     mkfifo_works && FIFO_MODE=1
 }
-# effective_sensor <i>: the deployment's OWN sensor when the server sent one
-# (dual-plant pairs), else the global default. Lets one agent run a FIFO bait
-# and an atime bait side by side.
+# effective_sensor <i>: which sensor governs THIS bait. Precedence:
+#   1. an explicit operator --sensor (fifo|atime) - an intentional override that
+#      must win over the server (#164 F2): the operator opted out of/into FIFOs;
+#   2. the deployment's OWN sensor when the server sent one (dual-plant pairs);
+#   3. the platform default.
+# Lets one agent run a FIFO bait and an atime bait side by side.
 effective_sensor() {
+    case "$SENSOR" in fifo|atime) printf '%s' "$SENSOR"; return 0 ;; esac
     eval "_es=\${dep_sensor_$1:-}"
-    if [ -n "$_es" ]; then printf '%s' "$_es"; return 0; fi
-    if [ "$SENSOR" = atime ]; then printf 'atime'
-    elif [ "$FIFO_MODE" = 1 ]; then printf 'fifo'
+    [ -n "$_es" ] && { printf '%s' "$_es"; return 0; }
+    if [ "$FIFO_MODE" = 1 ]; then printf 'fifo'
     elif [ "$(platform)" = linux ] && command -v inotifywait >/dev/null 2>&1; then printf 'inotify'
     else printf 'atime'; fi
 }
