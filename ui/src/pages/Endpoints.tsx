@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
 import type { Endpoint } from "../api";
-import { EndpointBadge, Topbar, timeAgo } from "../components/ui.tsx";
+import { api } from "../api";
+import { EndpointBadge, timeAgo, Topbar } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 export default function Endpoints() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const nav = useNavigate();
+  const PAGE_TITLE = "Endpoints";
 
   useEffect(() => {
     api.listEndpoints().then(setEndpoints);
@@ -14,6 +16,7 @@ export default function Endpoints() {
 
   return (
     <>
+      <PageTitle title={PAGE_TITLE} />
       <Topbar title="Endpoints" />
       <div className="content">
         <div className="card">

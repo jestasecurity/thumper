@@ -6,9 +6,16 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # macOS is included so the FIFO read sensor (macOS-only; #100) actually runs
+    # in CI - the FIFO tests are skipif!=Darwin, so ubuntu alone never exercises
+    # them. Linux covers inotify/atime; macOS covers the FIFO path.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
