@@ -93,6 +93,7 @@ All options overridable via environment:
 | `THUMPER_DASHBOARD_REFRESH` | `60` | Auto-refresh interval (seconds, 0 = off) |
 | `THUMPER_ALLOWED_HOOK_CIDRS` | _(unset)_ | Comma-separated CIDRs/IPs exempted from the SSRF guard for outbound integration targets |
 | `THUMPER_SECRET_KEY` | _(unset)_ | Encrypts integration credentials at rest (Fernet); unset stores them in plaintext |
+| `THUMPER_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins allowed by CORS (instead of wildcard) |
 
 ## Security & trust model
 
