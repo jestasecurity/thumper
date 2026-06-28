@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-## [0.1.0]
+## [0.1.0] - unreleased
 
 Initial release: control-plane server, endpoint agent, dashboard UI, and the plugin system.
 
@@ -32,3 +32,4 @@ Initial release: control-plane server, endpoint agent, dashboard UI, and the plu
   Kubernetes (`deploy/helm/thumper`).
 
 [Unreleased]: https://github.com/jestasecurity/thumper/compare/v0.0.0...HEAD
+[0.1.0]: https://github.com/jestasecurity/thumper/releases/tag/v0.1.0
