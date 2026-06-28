@@ -206,14 +206,17 @@ def list_tripwires(db: Session = Depends(get_db)):
 @router.post("/tripwires", response_model=TripwireOut)
 def create_tripwire(body: CreateTripwireIn, db: Session = Depends(get_db)):
     path = _validate_bait_path(body.path)
+    name = body.name.strip()
     if body.source == "custom" and not body.custom_content:
         raise HTTPException(400, "custom source requires custom_content")
+    if not name:
+        raise HTTPException(400, "name is required")
     token = body.token or render_content(
         token_type=body.token_type, source=body.source,
         custom_content=body.custom_content,
     )
     tripwire = store.create_tripwire(
-        db, name=body.name, token_type=body.token_type, path=path,
+        db, name=name, token_type=body.token_type, path=path,
         source=body.source, custom_content=body.custom_content, token=token,
     )
     return _tripwire_out(db, tripwire)
