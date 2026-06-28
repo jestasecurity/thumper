@@ -57,13 +57,16 @@ LAST_RESYNC=0
 FIFO_MODE=0
 BAITCACHE=""
 REPLANTED=0
-probe_fifo_mode() {
-    FIFO_MODE=0
-    [ "$(platform)" = "darwin" ] || return 0  # FIFO sensor is macOS-only; Linux uses inotify
-    command -v mkfifo >/dev/null 2>&1 || return 0
+mkfifo_works() {  # 0 if mkfifo actually works in the state dir (any platform: FIFO works on Linux/CI too)
+    command -v mkfifo >/dev/null 2>&1 || return 1
     _probe="$(dirname "$STATE_FILE")/.fifoprobe.$$"
-    if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; FIFO_MODE=1; fi
-    unset _probe
+    if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; unset _probe; return 0; fi
+    unset _probe; return 1
+}
+probe_fifo_mode() {  # AUTO policy: default to FIFO on macOS only (Linux defaults to inotify)
+    FIFO_MODE=0
+    [ "$(platform)" = "darwin" ] || return 0
+    mkfifo_works && FIFO_MODE=1
 }
 # effective_sensor <i>: the deployment's OWN sensor when the server sent one
 # (dual-plant pairs), else the global default. Lets one agent run a FIFO bait
@@ -372,6 +375,11 @@ plant() {  # plant <i>
         return 0
     fi
 
+    # Planting a REGULAR-file bait: if a leftover FIFO sits at this path (e.g. a
+    # prior FIFO run, swept-miss), remove it first - `curl -o` into a no-reader
+    # FIFO blocks forever (Roee #160 F1). Only our own bait reaches here (the
+    # overwrite guard above already refused a path we didn't plant).
+    [ -p "$path" ] && rm -f "$path"
     if ! curl -fsS "$url" -H "Authorization: Bearer $AGENT_TOKEN" -o "$path"; then
         rm -f "$path"   # remove the partial/empty file curl may have left
         err "failed to fetch bait for $id"
@@ -815,12 +823,14 @@ run() {
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
     WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
     mkdir -p "$(dirname "$STATE_FILE")"
-    if [ "$SENSOR" = atime ]; then
-        FIFO_MODE=0; log "sensor: atime poll (regular-file bait, re-armable)"
-    else
-        probe_fifo_mode
-        [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait (macOS)"
-    fi
+    case "$SENSOR" in
+        atime) FIFO_MODE=0; log "sensor: atime poll (regular-file bait, re-armable)" ;;
+        fifo)  # operator forced FIFO: honor it on ANY platform (mkfifo works on Linux/CI), or fail loudly
+               if mkfifo_works; then FIFO_MODE=1; log "sensor: FIFO bait (forced)"
+               else err "--sensor fifo requested but mkfifo is unavailable here"; exit 1; fi ;;
+        *)     probe_fifo_mode
+               [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait (macOS)" ;;
+    esac
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
@@ -829,8 +839,11 @@ run() {
     trap 'release_singleton' EXIT
     # Only the lock holder sweeps stale FIFOs from a prior hard-kill; a duplicate
     # invocation exits at acquire_singleton above and must never touch the live
-    # agent's shared manifest/FIFOs (MDM re-push safety).
-    [ "$FIFO_MODE" = 1 ] && remove_fifos
+    # agent's shared manifest/FIFOs (MDM re-push safety). Sweep regardless of the
+    # CURRENT sensor: a prior FIFO run's leftover pipes must be cleared even when
+    # this run is atime mode, else plant() would curl into a no-reader FIFO and
+    # hang forever (only manifest paths that ARE FIFOs are removed, so it's safe).
+    remove_fifos
     resolve_target_user
 
     # Abort BEFORE enrolling if any bait path is occupied, so a refused install
@@ -901,8 +914,13 @@ run() {
         fi
         REPLANTED=0
         verify_planted   # every cycle, even when the set did not change
-        if [ "$FIFO_MODE" = 1 ] && [ "$REPLANTED" = 1 ]; then
-            log "re-planted bait - restarting FIFO watcher to serve it"
+        if [ "$REPLANTED" = 1 ]; then
+            # A re-plant gives the bait a new inode/timestamp, which every sensor's
+            # per-bait state depends on: a FIFO needs re-serving, an atime bait
+            # needs re-arming (else its stale year-2000 baseline fires a ghost
+            # alert), an inotify watch needs re-pointing at the new inode. Restart
+            # regardless of platform/mode (FIFO_MODE is 0 on Linux even for FIFOs).
+            log "re-planted bait - restarting watcher to re-arm/re-serve it"
             stop_watcher
             start_watcher
         fi
