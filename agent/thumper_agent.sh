@@ -669,14 +669,21 @@ serve_fifo() {  # serve_fifo <i> - serve one bait FIFO forever; a read = a hit
     done
 }
 
-watch_fifo() {  # supervisor: one serve_fifo per bait, wait on them
-    log "watching $DEP_COUNT bait file(s) via FIFO"
-    i=1
-    while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & i=$((i + 1)); done
-    wait
-    [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
-    err "FIFO watcher exited unexpectedly - degrading to atime poll"
-    watch_atime
+watch_fifo() {  # supervisor: one serve_fifo per bait, wait on them, re-serve on death
+    while :; do
+        log "watching $DEP_COUNT bait file(s) via FIFO"
+        i=1
+        while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & i=$((i + 1)); done
+        wait
+        [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+        # Do NOT fall back to atime: the baits are still pipes, so a reader's
+        # open() blocks on the now-writerless FIFO, atime never moves, and nothing
+        # ever fires - "degraded to atime" looks healthy but detects zero (Roee
+        # #123 F3). Re-serve instead; this self-heals once verify_planted
+        # re-creates any deleted/tampered FIFO.
+        err "FIFO serving exited unexpectedly - re-serving in 1s"
+        sleep 1
+    done
 }
 
 # Dual-plant: each deployment runs under its OWN sensor. FIFO baits (canonical,
@@ -792,7 +799,22 @@ verify_planted() {
             report_plant "$vid" failed
         elif [ "$(effective_sensor "$i")" = fifo ] && [ -e "$p" ] && ! [ -p "$p" ]; then
             # A regular file where our FIFO should be = tampering/replacement.
+            # Recover like the "missing" branch below: plant() removes the impostor
+            # (our own path) and re-creates the FIFO, then REPLANTED restarts the
+            # watcher to serve it. A bare report-failed would leave the sensor
+            # permanently blind - while a mere *deletion* self-heals, so a
+            # *replacement* must recover too, not be the stronger attack (Roee #123 F1).
             report_plant "$vid" failed
+            eval "a=\${heal_$vid:-0}"
+            if [ "$a" -lt "$REPLANT_MAX" ]; then
+                if plant "$i"; then
+                    log "recovered tampered FIFO bait $vid"
+                    REPLANTED=1
+                else
+                    eval "heal_$vid=$((a + 1))"
+                    log "FIFO recovery failed for $vid ($((a + 1))/$REPLANT_MAX)"
+                fi
+            fi
         elif [ -e "$p" ]; then
             # Bait is on disk → re-assert planted every cycle. Recovers a deployment
             # whose initial report was lost (e.g. a network blip during report_plant)
@@ -867,6 +889,10 @@ run() {
             fire "$i" open simulated "$$" "${USER:-$(id -un)}" ""
             i=$((i + 1))
         done
+        # --simulate exits before the cleanup traps are armed, so sweep any FIFO
+        # bait now: a leftover no-reader pipe blocks every real open() forever
+        # (e.g. a process reading ~/.aws/credentials) - Roee #123 F2.
+        [ "$FIFO_MODE" = 1 ] && remove_fifos
         return 0
     fi
     [ "$ONCE" = "1" ] && return 0
