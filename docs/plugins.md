@@ -100,3 +100,7 @@ with a generated config form. Verify it loads:
 ```bash
 python -c "from thumper.plugins.registry import load_plugin; load_plugin('slack', {})"
 ```
+
+---
+
+See also: [Adding a honeytoken type](tokens.md)
