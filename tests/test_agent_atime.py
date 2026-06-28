@@ -87,6 +87,11 @@ def test_atime_sensor_is_rearmable(server, tmp_path):
         assert _wait(lambda: _atime_hits() >= 1), "read #1 was not detected"
         # the agent MUST re-arm so the next read is detectable
         assert _wait(lambda: _atime(bait) < ARMED_MAX), "bait was not re-armed after detection"
+        # Let the re-arm fully settle before the next read. The agent re-arms in two
+        # steps (touch atime->past, then re-read the baseline); bumping atime in that
+        # ms-wide window would be captured AS the new baseline and missed. A real
+        # reader doesn't race the re-arm, so the test shouldn't either (one poll cycle).
+        time.sleep(2)
         # simulate read #2
         os.utime(bait, (time.time(), os.stat(bait).st_mtime))
         assert _wait(lambda: _atime_hits() >= 2), "read #2 not detected (re-arm is broken)"
