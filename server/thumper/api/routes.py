@@ -74,6 +74,12 @@ def _validate_bait_path(path: str) -> str:
     p = (path or "").strip()
     if not p:
         raise HTTPException(400, "path is required")
+    # Reject control chars (tab/newline/CR/NUL/…): the path is emitted into the
+    # tab- and newline-framed /agent/deployments protocol, so an embedded
+    # delimiter would forge extra fields/records whose attacker-chosen id is
+    # eval'd by the root agent - an unauthenticated root-RCE primitive (#103).
+    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in p):
+        raise HTTPException(400, "path must not contain control characters")
     if ".." in p.split("/"):
         raise HTTPException(400, "path must not contain '..'")
     # Accept only `~/` (current user's home), NOT `~user/`: the agent's expand_path
