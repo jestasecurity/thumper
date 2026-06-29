@@ -161,3 +161,19 @@ def test_lock_released_on_clean_exit(agent):
     assert result.returncode == 0
     assert "/api/enroll" in _StubHandler.seen
     assert not agent["lock_dir"].exists()
+
+
+@pytest.mark.parametrize("flag", ["--poll", "--heartbeat", "--sync-interval"])
+def test_numeric_interval_args_reject_non_numbers(agent, flag):
+    result = agent["run"](flag, "abc")
+
+    assert result.returncode == 2
+    assert f"{flag} must be a non-negative integer" in result.stderr
+    assert "/api/enroll" not in _StubHandler.seen
+
+
+def test_zero_disables_optional_agent_intervals(agent):
+    result = agent["run"]("--heartbeat", "0", "--sync-interval", "0")
+
+    assert result.returncode == 0
+    assert "/api/enroll" in _StubHandler.seen
