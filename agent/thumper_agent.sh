@@ -56,6 +56,12 @@ TAB=$(printf '\t')
 
 log() { printf '[thumper %s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 err() { printf '[thumper %s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2; }
+is_uint() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+        *) return 0 ;;
+    esac
+}
 
 # ── state (key=value lines, NOT json) ────────────────────────────────────────
 state_get() {  # state_get <file> <key>
@@ -819,9 +825,9 @@ while [ $# -gt 0 ]; do
         --enroll-token) ENROLL_TOKEN=$2; shift 2 ;;
         --tripwire)     TRIPWIRES="${TRIPWIRES:+$TRIPWIRES,}$2"; shift 2 ;;
         --state-file)   STATE_FILE=$2; shift 2 ;;
-        --poll)         POLL=$2; shift 2 ;;
-        --heartbeat)    HEARTBEAT=$2; shift 2 ;;
-        --sync-interval) SYNC_INTERVAL=$2; shift 2 ;;
+        --poll)         is_uint "${2:-}" || { err "--poll must be a non-negative integer"; exit 2; }; POLL=$2; shift 2 ;;
+        --heartbeat)    is_uint "${2:-}" || { err "--heartbeat must be a non-negative integer"; exit 2; }; HEARTBEAT=$2; shift 2 ;;
+        --sync-interval) is_uint "${2:-}" || { err "--sync-interval must be a non-negative integer"; exit 2; }; SYNC_INTERVAL=$2; shift 2 ;;
         --once)         ONCE=1; shift ;;
         --simulate)     SIMULATE=1; shift ;;
         --force)        FORCE=1; shift ;;
