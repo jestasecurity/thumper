@@ -88,7 +88,7 @@ export default function Dashboard() {
             {refreshInterval > 0 && (
               <span className="countdown-badge">{countdown}s</span>
             )}
-            <button className="btn-icon" title="Refresh" onClick={manualRefresh}>
+            <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={manualRefresh}>
               <RefreshCw size={15} className={spinning ? "spin" : ""} />
             </button>
             <Link to="/tripwires/new" className="btn primary">
