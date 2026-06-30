@@ -2,11 +2,12 @@ import json
 
 import pytest
 
-from thumper.tokens.generator import generate_token, rand_b64, rand_hex
+from thumper.tokens.generator import generate_token, rand_alnum, rand_b64, rand_hex
 
 
 HEX_ALPHABET = set("0123456789abcdef")
 B64_ALPHABET = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+ALNUM_ALPHABET = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
 
 
 @pytest.mark.parametrize("length", [0, 1, 32])
@@ -25,6 +26,14 @@ def test_rand_b64_returns_requested_length_and_base64_alphabet(length):
     assert set(value) <= B64_ALPHABET
 
 
+@pytest.mark.parametrize("length", [0, 1, 32])
+def test_rand_alnum_returns_requested_length_and_alnum_alphabet(length):
+    value = rand_alnum(length)
+
+    assert len(value) == length
+    assert set(value) <= ALNUM_ALPHABET
+
+
 def test_generate_aws_token_has_credentials_file_shape():
     token = generate_token("aws")
 
@@ -39,6 +48,16 @@ def test_generate_github_token_has_oauth_file_shape():
     assert "github.com:" in token
     assert "oauth_token: github_pat_" in token
     assert "user: ci-deploy-bot" in token
+
+
+def test_generate_npm_token_has_npmrc_shape():
+    token = generate_token("npm")
+
+    prefix = "//registry.npmjs.org/:_authToken=npm_"
+    assert token.startswith(prefix)
+    token_value = token.removeprefix(prefix).strip()
+    assert len(token_value) == 36
+    assert set(token_value) <= ALNUM_ALPHABET
 
 
 def test_generate_gcp_token_has_service_account_json_shape():
