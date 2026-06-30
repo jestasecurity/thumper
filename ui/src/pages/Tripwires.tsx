@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
-import { api } from "../api";
 import type { InstallCommand, Tripwire } from "../api";
-import { CopyField, Modal, TripwireBadge, TypeTag, Topbar, timeAgo } from "../components/ui.tsx";
+import { api } from "../api";
+import { CopyField, Modal, timeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 export default function Tripwires() {
   const [tripwires, setTripwires] = useState<Tripwire[]>([]);
@@ -17,6 +18,7 @@ export default function Tripwires() {
   const [confirmName, setConfirmName] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const PAGE_TITLE = "Tripwires";
 
   const load = () => api.listTripwires().then(setTripwires);
   useEffect(() => { load(); }, []);
@@ -80,8 +82,9 @@ export default function Tripwires() {
 
   return (
     <>
+      <PageTitle title={PAGE_TITLE} />
       <Topbar
-        title="Tripwires"
+        title={PAGE_TITLE}
         action={
           <Link to="/tripwires/new" className="btn primary">
             + New tripwire
@@ -157,10 +160,10 @@ export default function Tripwires() {
                     <td>{t.deployed_count}</td>
                     <td><TripwireBadge deployed={t.deployed_count} triggered={t.triggered_count} /></td>
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn-icon" title="Rename" onClick={() => { setDraft(t.name); setActionErr(null); setRenaming(t); }}>
+                      <button className="btn-icon" title="Rename" aria-label="Rename tripwire" onClick={() => { setDraft(t.name); setActionErr(null); setRenaming(t); }}>
                         <Pencil size={14} />
                       </button>
-                      <button className="btn-icon danger" title="Delete" onClick={() => { setConfirmName(""); setActionErr(null); setDeleting(t); }}>
+                      <button className="btn-icon danger" title="Delete" aria-label="Delete tripwire" onClick={() => { setConfirmName(""); setActionErr(null); setDeleting(t); }}>
                         <Trash2 size={14} />
                       </button>
                     </td>

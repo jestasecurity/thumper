@@ -1,20 +1,27 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
 import type { AppSettings } from "../api";
+import { api } from "../api";
 import { Topbar } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 export default function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
+  const PAGE_TITLE = "Settings";
 
   useEffect(() => {
-    api.getSettings().then(setSettings);
+    Promise.all([api.getSettings(), api.getVersion()]).then(([s, v]) => {
+      setSettings(s);
+      setVersion(v.version);
+    });
   }, []);
 
   if (!settings) return <div className="content">Loading...</div>;
 
   return (
     <>
-      <Topbar title="Settings" />
+      <PageTitle title={PAGE_TITLE} />
+      <Topbar title={PAGE_TITLE} />
       <div className="content">
         <p className="muted" style={{ marginTop: 0 }}>
           Read-only view of the current server configuration.
@@ -64,6 +71,12 @@ export default function Settings() {
             </div>
           </div>
         </div>
+
+        {version && (
+          <p className="muted" style={{ marginTop: "1.5rem", marginBottom: 0 }}>
+            Server version {version}
+          </p>
+        )}
       </div>
     </>
   );

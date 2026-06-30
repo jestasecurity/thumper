@@ -62,7 +62,9 @@ def test_list_alerts_invalid_status_raises(client_db):
 
 def test_resolve_all_alerts_store(client_db):
     _, db = client_db
-    _mk(db, did="dp_1"); _mk(db, did="dp_2"); _mk(db, did="dp_3")
+    _mk(db, did="dp_1")
+    _mk(db, did="dp_2")
+    _mk(db, did="dp_3")
     assert store.resolve_all_alerts(db) == 3
     assert store.resolve_all_alerts(db) == 0  # nothing left open
     assert store.list_alerts(db, status="open") == []
@@ -70,7 +72,8 @@ def test_resolve_all_alerts_store(client_db):
 
 def test_resolve_all_endpoint(client_db):
     tc, db = client_db
-    _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    _mk(db, did="dp_1")
+    _mk(db, did="dp_2")
     resp = tc.post("/api/alerts/resolve-all")
     assert resp.status_code == 200
     assert resp.json() == {"resolved": 2}
@@ -79,7 +82,9 @@ def test_resolve_all_endpoint(client_db):
 
 def test_bulk_resolve_for_deployment(client_db):
     _, db = client_db
-    _mk(db, did="dp_1"); _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    _mk(db, did="dp_1")
+    _mk(db, did="dp_1")
+    _mk(db, did="dp_2")
     assert store.resolve_deployment_alerts(db, "dp_1") == 2
     # a second call resolves nothing new
     assert store.resolve_deployment_alerts(db, "dp_1") == 0
@@ -88,7 +93,8 @@ def test_bulk_resolve_for_deployment(client_db):
 
 def test_active_triggers_counts_open_deployments_only(client_db):
     _, db = client_db
-    _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    _mk(db, did="dp_1")
+    _mk(db, did="dp_2")
     assert store.count_distinct_alert_deployments(db) == 2
     store.resolve_deployment_alerts(db, "dp_1")
     assert store.count_distinct_alert_deployments(db) == 1
@@ -96,7 +102,8 @@ def test_active_triggers_counts_open_deployments_only(client_db):
 
 def test_list_alerts_status_filter(client_db):
     _, db = client_db
-    a = _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    a = _mk(db, did="dp_1")
+    _mk(db, did="dp_2")
     store.resolve_alert(db, a.id)
     assert len(store.list_alerts(db)) == 2
     assert len(store.list_alerts(db, status="open")) == 1
@@ -129,7 +136,8 @@ def test_resolve_unknown_alert_endpoint_404(client_db):
 
 def test_bulk_resolve_endpoint(client_db):
     tc, db = client_db
-    _mk(db, did="dp_1"); _mk(db, did="dp_1")
+    _mk(db, did="dp_1")
+    _mk(db, did="dp_1")
     resp = tc.post("/api/alerts/resolve", json={"deployment_id": "dp_1"})
     assert resp.status_code == 200
     assert resp.json() == {"resolved": 2}
@@ -138,7 +146,8 @@ def test_bulk_resolve_endpoint(client_db):
 
 def test_stats_active_triggers_reflects_open(client_db):
     tc, db = client_db
-    _mk(db, did="dp_1"); _mk(db, did="dp_2")
+    _mk(db, did="dp_1")
+    _mk(db, did="dp_2")
     assert tc.get("/api/stats").json()["active_triggers"] == 2
     tc.post("/api/alerts/resolve", json={"deployment_id": "dp_1"})
     assert tc.get("/api/stats").json()["active_triggers"] == 1
@@ -148,7 +157,8 @@ def test_stats_active_triggers_reflects_open(client_db):
 
 def test_endpoint_trigger_count_is_open_only(client_db):
     _, db = client_db
-    a = _mk(db, did="dp_1", eid="ep_1"); _mk(db, did="dp_2", eid="ep_1")
+    a = _mk(db, did="dp_1", eid="ep_1")
+    _mk(db, did="dp_2", eid="ep_1")
     assert store.count_alerts_for_endpoint(db, "ep_1") == 2
     store.resolve_alert(db, a.id)
     assert store.count_alerts_for_endpoint(db, "ep_1") == 1
@@ -156,7 +166,8 @@ def test_endpoint_trigger_count_is_open_only(client_db):
 
 def test_tripwire_trigger_count_is_open_only(client_db):
     _, db = client_db
-    a = _mk(db, did="dp_1", tid="tw_1"); _mk(db, did="dp_2", tid="tw_1")
+    a = _mk(db, did="dp_1", tid="tw_1")
+    _mk(db, did="dp_2", tid="tw_1")
     assert store.count_alerts_for_tripwire(db, "tw_1") == 2
     store.resolve_alert(db, a.id)
     assert store.count_alerts_for_tripwire(db, "tw_1") == 1
@@ -164,7 +175,8 @@ def test_tripwire_trigger_count_is_open_only(client_db):
 
 def test_deployment_trigger_count_is_open_only(client_db):
     _, db = client_db
-    a = _mk(db, did="dp_1"); _mk(db, did="dp_1")
+    a = _mk(db, did="dp_1")
+    _mk(db, did="dp_1")
     assert store.count_alerts_for_deployment(db, "dp_1") == 2
     store.resolve_alert(db, a.id)
     assert store.count_alerts_for_deployment(db, "dp_1") == 1

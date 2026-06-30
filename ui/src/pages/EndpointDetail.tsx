@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
-import { api, ApiError } from "../api";
 import type { EndpointDetail as ED, Tripwire } from "../api";
-import { DeployBadge, EndpointBadge, Topbar, timeAgo } from "../components/ui.tsx";
+import { api, ApiError } from "../api";
+import { DeployBadge, EndpointBadge, timeAgo, Topbar } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
@@ -96,6 +97,7 @@ export default function EndpointDetail() {
 
   return (
     <>
+      <PageTitle title={ep.hostname} />
       <Topbar
         title={ep.hostname}
         action={
@@ -192,6 +194,7 @@ export default function EndpointDetail() {
                       <button
                         className="btn-icon danger"
                         title="Remove"
+                        aria-label="Remove tripwire deployment"
                         disabled={busy}
                         onClick={() => setRemoving({ tripwireId: d.tripwire_id, name: nameOf(d.tripwire_id) })}
                       >

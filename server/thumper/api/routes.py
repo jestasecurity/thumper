@@ -8,7 +8,6 @@ Two distinct contracts live here:
     no JSON parser). See docs/architecture.md.
 """
 import hmac
-import json
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -18,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
-from .. import store
+from .. import __version__, store
 from ..config import AGENT_PATH, BASE_URL, DASHBOARD_REFRESH, DB_URL, ENROLL_TOKEN, INSTALL_TOKEN
 from ..db import get_db, get_engine
 from ..models import (
@@ -209,14 +208,17 @@ def list_tripwires(db: Session = Depends(get_db)):
 @router.post("/tripwires", response_model=TripwireOut)
 def create_tripwire(body: CreateTripwireIn, db: Session = Depends(get_db)):
     path = _validate_bait_path(body.path)
+    name = body.name.strip()
     if body.source == "custom" and not body.custom_content:
         raise HTTPException(400, "custom source requires custom_content")
+    if not name:
+        raise HTTPException(400, "name is required")
     token = body.token or render_content(
         token_type=body.token_type, source=body.source,
         custom_content=body.custom_content,
     )
     tripwire = store.create_tripwire(
-        db, name=body.name, token_type=body.token_type, path=path,
+        db, name=name, token_type=body.token_type, path=path,
         source=body.source, custom_content=body.custom_content, token=token,
     )
     return _tripwire_out(db, tripwire)
@@ -494,6 +496,12 @@ def delete_integration(plugin: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "unknown plugin")
     store.delete_integration(db, plugin)
     return {"status": "ok"}
+
+
+# ── version ─────────────────────────────────────────────────────────────────
+@router.get("/version")
+def get_version():
+    return {"version": __version__}
 
 
 # ── settings (read-only) ────────────────────────────────────────────────────
