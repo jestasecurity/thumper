@@ -3,8 +3,6 @@ import hashlib
 import hmac
 from pathlib import Path
 
-import pytest
-
 TOOL_FILE = Path(__file__).resolve().parents[1] / "tools" / "webhook_test_server.py"
 
 

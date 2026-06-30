@@ -2,7 +2,6 @@
 from sqlalchemy.orm import Session
 
 from .. import store
-from ..plugins.registry import get_manifest
 from .secrets_crypto import unpack_config
 
 

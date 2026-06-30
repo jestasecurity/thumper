@@ -46,7 +46,8 @@ class _Stub(http.server.BaseHTTPRequestHandler):
         elif self.path.startswith("/content/"):
             self._text(BAIT_BODY)
         else:
-            self.send_response(404); self.end_headers()
+            self.send_response(404)
+            self.end_headers()
 
 
 def _write(path, body):
