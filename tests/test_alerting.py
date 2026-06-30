@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from thumper import store
-from thumper.db import Base, DeliveryAttempt, Integration, get_db
+from thumper.db import Base, DeliveryAttempt, Integration
 from thumper.services import alerting
 
 

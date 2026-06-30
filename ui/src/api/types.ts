@@ -147,6 +147,10 @@ export interface IntegrationTestResult {
   tested_at: string;
 }
 
+export interface VersionInfo {
+  version: string;
+}
+
 export interface AppSettings {
   database: { backend: string; location: string };
   thresholds: { stale_minutes: number; inactive_hours: number };
