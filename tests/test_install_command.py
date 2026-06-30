@@ -2,8 +2,6 @@
 of tripwires (SP1 of #34). The single-tripwire path (build_install, used by
 TripwireDetail + the deploy plugins) must stay byte-for-byte unchanged.
 """
-import pytest
-
 from thumper import store
 
 

@@ -16,6 +16,7 @@ import type {
   TokenTypeInfo,
   Tripwire,
   TripwireDetail,
+  VersionInfo,
 } from "./types";
 
 const BASE = "/api";
@@ -53,6 +54,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export const httpApi = {
   getStats: () => req<DashboardStats>("/stats"),
   getSettings: () => req<AppSettings>("/settings"),
+  getVersion: () => req<VersionInfo>("/version"),
 
   // Tripwire definitions
   listTripwires: () => req<Tripwire[]>("/tripwires"),

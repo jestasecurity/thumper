@@ -1,7 +1,6 @@
 """Repository layer over SQLAlchemy ORM. All queries live here so the rest of
 the app deals in ORM model instances (attribute access: row.id, row.name, …).
 """
-import json
 import secrets
 from typing import Optional
 
@@ -13,7 +12,7 @@ from .db import (
     Alert, Deployment, DeliveryAttempt, Endpoint, Integration, Tripwire,
 )
 from .models import iso_now
-from .services.secrets_crypto import pack_config, unpack_config
+from .services.secrets_crypto import pack_config
 
 
 def _id(prefix: str) -> str:
