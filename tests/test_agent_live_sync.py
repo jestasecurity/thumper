@@ -43,7 +43,9 @@ class _StubHandler(http.server.BaseHTTPRequestHandler):
             self._text(f"agent_token={_StubHandler.valid_token}\nendpoint_id=ep_1\n")
         elif self.path == "/api/agent/heartbeat":
             if self.headers.get("Authorization") != f"Bearer {_StubHandler.valid_token}":
-                self.send_response(401); self.end_headers(); return
+                self.send_response(401)
+                self.end_headers()
+                return
             _StubHandler.heartbeats_ok += 1
             self._text("ok")
         else:
@@ -66,7 +68,9 @@ class _StubHandler(http.server.BaseHTTPRequestHandler):
         elif self.path.startswith("/content/"):
             did = self.path.split("/")[-1]
             if did in _StubHandler.fail_content:
-                self.send_response(500); self.end_headers(); return
+                self.send_response(500)
+                self.end_headers()
+                return
             self._text(BAIT_BODY)
         else:
             self.send_response(404)

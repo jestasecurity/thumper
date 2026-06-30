@@ -20,6 +20,35 @@ def _enroll(tc, machine_id, tripwire_ids):
     assert r.status_code == 200
 
 
+def test_create_tripwire_strips_name(client_db):
+    tc, db = client_db
+
+    resp = tc.post("/api/tripwires", json={
+        "name": "  foo  ",
+        "token_type": "aws",
+        "path": "~/.aws/credentials",
+        "source": "template",
+    })
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "foo"
+    assert store.get_tripwire(db, body["id"]).name == "foo"
+
+
+def test_create_empty_name_is_400(client_db):
+    tc, db = client_db
+
+    resp = tc.post("/api/tripwires", json={
+            "name": "   ",
+            "token_type": "aws",
+            "path": "~/.aws/credentials", 
+            "source": "template",
+    })
+
+    assert resp.status_code == 400
+
+
 def test_rename_tripwire(client_db):
     tc, db = client_db
     a = _mk(db, "old-name")

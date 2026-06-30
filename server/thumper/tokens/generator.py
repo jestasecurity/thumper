@@ -16,6 +16,7 @@ import secrets
 
 _HEX = "0123456789abcdef"
 _B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+_ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 
 def _rand(alphabet: str, n: int) -> str:
@@ -28,6 +29,10 @@ def rand_hex(n: int) -> str:
 
 def rand_b64(n: int) -> str:
     return _rand(_B64, n)
+
+
+def rand_alnum(n: int) -> str:
+    return _rand(_ALNUM, n)
 
 
 def generate_token(token_type: str) -> str:
@@ -45,6 +50,9 @@ def generate_token(token_type: str) -> str:
             f"  oauth_token: github_pat_{rand_b64(22)}_{rand_b64(59)}\n"
             "  user: ci-deploy-bot\n"
         )
+
+    if token_type == "npm":
+        return f"//registry.npmjs.org/:_authToken=npm_{rand_alnum(36)}\n"
 
     if token_type == "gcp":
         return json.dumps(

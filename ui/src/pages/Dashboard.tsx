@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
-import { api } from "../api";
 import type { Alert, DashboardStats, Tripwire } from "../api";
-import { AlertBadge, TripwireBadge, TypeTag, Topbar, timeAgo } from "../components/ui.tsx";
+import { api } from "../api";
+import { AlertBadge, timeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
+import PageTitle from "../components/PageTitle.tsx";
 
 type AlertFilter = "open" | "all" | "resolved";
 
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<AlertFilter>("open");
   const nav = useNavigate();
   const countdownRef = useRef<ReturnType<typeof setInterval>>();
+  const PAGE_TITLE = "Dashboard";
 
   const reload = useCallback(() => {
     setSpinning(true);
@@ -78,8 +80,9 @@ export default function Dashboard() {
 
   return (
     <>
+      <PageTitle title={PAGE_TITLE} />
       <Topbar
-        title="Dashboard"
+        title={PAGE_TITLE}
         action={
           <span className="row" style={{ gap: 10, alignItems: "center" }}>
             {refreshInterval > 0 && (
