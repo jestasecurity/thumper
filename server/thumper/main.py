@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from . import __version__
 from .api import router
 from .config import (
     UI_DIST, base_url_fail_closed, insecure_base_url, insecure_default_tokens)
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Thumper", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Thumper", version=__version__, lifespan=lifespan)
 
 # In dev the UI runs on :5173 and proxies /api → :8000, so it's same-origin to
 # the browser; CORS is permissive here to keep direct API calls / tools simple.
@@ -72,7 +73,7 @@ app.include_router(router)
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}
 
 
 @app.exception_handler(StarletteHTTPException)

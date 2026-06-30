@@ -17,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
-from .. import store
+from .. import __version__, store
 from ..config import AGENT_PATH, BASE_URL, DASHBOARD_REFRESH, DB_URL, ENROLL_TOKEN, INSTALL_TOKEN
 from ..db import get_db, get_engine
 from ..models import (
@@ -489,6 +489,12 @@ def delete_integration(plugin: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "unknown plugin")
     store.delete_integration(db, plugin)
     return {"status": "ok"}
+
+
+# ── version ─────────────────────────────────────────────────────────────────
+@router.get("/version")
+def get_version():
+    return {"version": __version__}
 
 
 # ── settings (read-only) ────────────────────────────────────────────────────
