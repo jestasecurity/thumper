@@ -9,12 +9,10 @@ Full E2E requires a real GitHub runner; these checks cover:
 """
 import json
 import os
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).parent.parent
