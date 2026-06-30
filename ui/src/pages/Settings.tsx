@@ -6,10 +6,14 @@ import PageTitle from "../components/PageTitle.tsx";
 
 export default function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
   const PAGE_TITLE = "Settings";
 
   useEffect(() => {
-    api.getSettings().then(setSettings);
+    Promise.all([api.getSettings(), api.getVersion()]).then(([s, v]) => {
+      setSettings(s);
+      setVersion(v.version);
+    });
   }, []);
 
   if (!settings) return <div className="content">Loading...</div>;
@@ -67,6 +71,12 @@ export default function Settings() {
             </div>
           </div>
         </div>
+
+        {version && (
+          <p className="muted" style={{ marginTop: "1.5rem", marginBottom: 0 }}>
+            Server version {version}
+          </p>
+        )}
       </div>
     </>
   );

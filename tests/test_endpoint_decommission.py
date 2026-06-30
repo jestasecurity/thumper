@@ -27,7 +27,8 @@ def _raw_endpoint(db, eid, token):
     ep = Endpoint(id=eid, hostname="host-1", platform="linux", machine_id=f"m-{eid}",
                   agent_token=token, enrolled_at="2026-01-01T00:00:00Z",
                   last_seen="2026-06-17T12:00:00Z")
-    db.add(ep); db.commit()
+    db.add(ep)
+    db.commit()
     return ep
 
 
