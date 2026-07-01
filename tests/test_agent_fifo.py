@@ -438,6 +438,27 @@ def test_simulate_does_not_leave_a_no_reader_fifo(server, tmp_path):
     )
 
 
+def test_simulate_does_not_leave_cached_credential_files(server, tmp_path):
+    # Roee #123 F2 residual: --simulate must also remove the cached fake-credential
+    # content it planted during planting, not just the FIFOs.
+    bait = tmp_path / "bait_aws"
+    Stub.bait_path = str(bait)
+    _run(server, tmp_path, "--simulate")
+    cache = tmp_path / "bait"
+    assert not cache.exists(), "--simulate left cached credential content behind"
+
+
+def test_fifo_supervisor_restarts_individual_dead_writers():
+    # Roee #123 F3 residual: watch_fifo must poll each writer's liveness (kill -0)
+    # and restart a SINGLE dead one whose FIFO still exists - a bare `wait` blocks
+    # until ALL writers exit, leaving one dead bait silently blind until the next
+    # full re-plant restart.
+    src = AGENT.read_text()
+    assert "kill -0" in src, "watch_fifo must check per-writer liveness"
+    assert "restarted dead FIFO writer" in src, "watch_fifo must restart a dead writer"
+    assert "re-serving in 1s" not in src, "the bare-wait/re-serve-all recovery must be gone"
+
+
 def test_atime_stat_order_prefers_portable_access_time():
     # #28: `stat -f %a` on Linux is statfs (free blocks), so the portable
     # `stat -c %X` must be tried FIRST. The atime read is now centralized in the
