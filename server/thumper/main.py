@@ -15,7 +15,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import __version__, config
 from .api import agent_router, router
 from .config import (
-    UI_DIST, base_url_fail_closed, insecure_base_url, insecure_default_tokens)
+    ALLOWED_ORIGINS, UI_DIST, base_url_fail_closed, insecure_base_url,
+    insecure_default_tokens)
 from .db import init_db
 from .services.secrets_crypto import encryption_enabled
 
@@ -64,13 +65,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Thumper", version=__version__, lifespan=lifespan)
 
-# In dev the UI runs on :5173 and proxies /api → :8000, so it's same-origin to
-# the browser; CORS is permissive here to keep direct API calls / tools simple.
+# CORS restricted to an allow-list (#23) - the Vite dev origin by default,
+# THUMPER_ALLOWED_ORIGINS in production. In monolith mode the UI is same-origin.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["authorization", "content-type"],
 )
 
 app.include_router(router)        # management/UI API — admin-token gated

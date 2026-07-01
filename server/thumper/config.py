@@ -41,6 +41,12 @@ def _parse_cidrs(raw: str):
 # SSRF guard (#74) doesn't block a legitimately-internal Splunk/Loki/webhook.
 ALLOWED_HOOK_CIDRS = _parse_cidrs(os.environ.get("THUMPER_ALLOWED_HOOK_CIDRS", ""))
 
+# Browser origins allowed to call the API (CORS, #23). Default = the Vite dev
+# origin; in monolith mode the UI is same-origin so CORS isn't needed. Set a
+# comma-separated THUMPER_ALLOWED_ORIGINS in production instead of wildcard.
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get(
+    "THUMPER_ALLOWED_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
+
 # Directory holding the installable plugins (each: plugin.py + manifest.yaml).
 # This is the repo-root `plugins/` tree, NOT server/thumper/plugins/ (which is
 # the plugin *framework* - base classes + loader).
