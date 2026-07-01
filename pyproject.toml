@@ -7,11 +7,11 @@ requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 dependencies = [
   "fastapi>=0.138.0",
-  "uvicorn[standard]>=0.27",
+  "uvicorn[standard]>=0.49.0",
   "pyyaml>=6.0.3",
-  "httpx>=0.27",
+  "httpx>=0.28.1",
   "sqlalchemy>=2.0.51",
-  "alembic>=1.13",
+  "alembic>=1.18.5",
   "cryptography>=49.0.0",
 ]
 
@@ -19,7 +19,7 @@ dependencies = [
 # The endpoint agent is a standalone Bash script (agent/thumper_agent.sh) using
 # only curl + openssl - it has no Python dependencies of its own.
 postgres = ["psycopg[binary]>=3.3.4"]
-mysql = ["pymysql>=1.1"]
+mysql = ["pymysql>=1.2.0"]
 dev = ["pytest>=9.1.1", "ruff>=0.4.0"]
 
 [tool.pytest.ini_options]
@@ -29,7 +29,7 @@ testpaths = ["tests"]
 pythonpath = ["server"]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]

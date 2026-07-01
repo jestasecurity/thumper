@@ -160,10 +160,10 @@ export default function Tripwires() {
                     <td>{t.deployed_count}</td>
                     <td><TripwireBadge deployed={t.deployed_count} triggered={t.triggered_count} /></td>
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn-icon" title="Rename" onClick={() => { setDraft(t.name); setActionErr(null); setRenaming(t); }}>
+                      <button className="btn-icon" title="Rename" aria-label="Rename tripwire" onClick={() => { setDraft(t.name); setActionErr(null); setRenaming(t); }}>
                         <Pencil size={14} />
                       </button>
-                      <button className="btn-icon danger" title="Delete" onClick={() => { setConfirmName(""); setActionErr(null); setDeleting(t); }}>
+                      <button className="btn-icon danger" title="Delete" aria-label="Delete tripwire" onClick={() => { setConfirmName(""); setActionErr(null); setDeleting(t); }}>
                         <Trash2 size={14} />
                       </button>
                     </td>

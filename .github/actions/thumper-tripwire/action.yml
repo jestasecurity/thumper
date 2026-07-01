@@ -1,0 +1,20 @@
+name: "Thumper CI tripwire"
+description: "Plant honeytoken bait and detect reads of secrets during a CI job"
+inputs:
+  server:
+    description: "Thumper server URL (must be https:// — the agent is executed on the runner; loopback allowed for local testing)"
+    required: true
+  enroll-token:
+    description: "Shared enroll token"
+    required: true
+  tripwires:
+    description: "Comma-separated tripwire ids to plant"
+    required: true
+  fail-on-trigger:
+    description: "Fail the job if bait is read"
+    required: false
+    default: "false"
+runs:
+  using: "node20"
+  main: "main.js"
+  post: "post.js"

@@ -1,6 +1,6 @@
 # Adding a honeytoken type
 
-Thumper ships with five built-in token types (`aws`, `github`, `gcp`, `azure`, `ssh`). Adding a new one touches exactly two files and one test, and both files must stay in sync or the API will accept the type name but fail to generate content.
+Thumper ships with six built-in token types (`aws`, `github`, `npm`, `gcp`, `azure`, `ssh`). Adding a new one touches exactly two files and one test, and both files must stay in sync or the API will accept the type name but fail to generate content.
 
 ## The two touch points
 
