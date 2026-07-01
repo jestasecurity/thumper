@@ -350,10 +350,15 @@ plant() {  # plant <i>
         fi
         chmod 600 "$cf" 2>/dev/null || true
         { [ -p "$path" ] || [ -f "$path" ]; } && rm -f "$path"  # replace our own stale bait on re-plant
-        if ! mkfifo "$path" 2>/dev/null; then
-            rm -f "$cf"; err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
-        fi
+        # Record BEFORE mkfifo, not after: a clean-exit signal (INT/TERM) landing
+        # in the gap between creating the FIFO and recording it would otherwise
+        # leave the FIFO behind, because the teardown trap's remove_fifos only
+        # removes paths listed in the manifest. record_planted is idempotent;
+        # undo it if mkfifo fails so the manifest never lists a phantom path.
         record_planted "$path"
+        if ! mkfifo "$path" 2>/dev/null; then
+            forget_planted "$path"; rm -f "$cf"; err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
+        fi
         chmod 600 "$path" 2>/dev/null || true
         [ -n "$TARGET_USER" ] && chown "$TARGET_USER" "$path" 2>/dev/null || true
         report_plant "$id" planted
