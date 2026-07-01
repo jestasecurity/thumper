@@ -19,7 +19,7 @@ dependencies = [
 # The endpoint agent is a standalone Bash script (agent/thumper_agent.sh) using
 # only curl + openssl - it has no Python dependencies of its own.
 postgres = ["psycopg[binary]>=3.3.4"]
-mysql = ["pymysql>=1.1"]
+mysql = ["pymysql>=1.2.0"]
 dev = ["pytest>=9.1.1", "ruff>=0.4.0"]
 
 [tool.pytest.ini_options]
