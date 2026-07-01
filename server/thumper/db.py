@@ -45,6 +45,9 @@ class Endpoint(Base):
     # the endpoint shows as "decommissioning"; the agent gets a kill signal on its
     # next heartbeat and the row is deleted once it confirms (or on force-remove).
     decommission_requested_at = Column(String(255))
+    # Per-job CI endpoints (issue #3): enrolled by the GitHub Action, auto-removed
+    # on job end (or pruned if a cancelled job skips cleanup). Non-ephemeral = 0.
+    ephemeral = Column(Integer, nullable=False, default=0, server_default="0")
 
 
 class Deployment(Base):
