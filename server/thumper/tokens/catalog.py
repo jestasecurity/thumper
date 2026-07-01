@@ -37,6 +37,19 @@ TOKEN_TYPES = [
                        "exfiltrates these to self-replicate via the API.",
     },
     {
+        "type": "npm",
+        "display_name": "npm token",
+        "default_path": "~/.npmrc",
+        "suggested_paths": [
+            "~/.npmrc",
+            "~/project/.npmrc",
+            "~/.env",
+        ],
+        "description": "Fake npm registry auth token (~/.npmrc). The credential "
+                       "the Shai-Hulud worm scans for first to self-publish "
+                       "malicious packages.",
+    },
+    {
         "type": "gcp",
         "display_name": "GCP service account",
         "default_path": "~/.config/gcloud/application_default_credentials.json",

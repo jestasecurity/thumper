@@ -2,6 +2,7 @@
 the app deals in ORM model instances (attribute access: row.id, row.name, …).
 """
 import secrets
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import distinct, func
@@ -65,20 +66,24 @@ def delete_tripwire(db: Session, tid: str) -> bool:
 
 # ── endpoints ────────────────────────────────────────────────────────────────
 def enroll_endpoint(db: Session, *, hostname: str, platform: Optional[str],
-                    machine_id: str) -> Endpoint:
-    """Upsert by machine_id. Returns the endpoint row (incl. agent_token)."""
+                    machine_id: str, ephemeral: bool = False) -> Endpoint:
+    """Upsert by machine_id. Returns the endpoint row (incl. agent_token).
+
+    ephemeral=True marks a short-lived CI endpoint (issue #3): enrolled by the
+    GitHub Action on job start and removed/pruned when the job ends."""
     existing = db.query(Endpoint).filter(Endpoint.machine_id == machine_id).first()
     now = iso_now()
     if existing:
         existing.hostname = hostname
         existing.platform = platform
         existing.last_seen = now
+        existing.ephemeral = 1 if ephemeral else 0
         db.commit()
         db.refresh(existing)
         return existing
     row = Endpoint(id=_id("ep"), hostname=hostname, platform=platform,
                    machine_id=machine_id, agent_token=secrets.token_hex(16),
-                   enrolled_at=now, last_seen=now)
+                   enrolled_at=now, last_seen=now, ephemeral=1 if ephemeral else 0)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -114,6 +119,32 @@ def request_decommission(db: Session, eid: str) -> Optional[Endpoint]:
         ep.decommission_requested_at = iso_now()
         db.commit()
     return ep
+
+
+def prune_stale_ephemeral(db: Session, older_than_seconds: int = 3600) -> int:
+    """Delete ephemeral endpoints not seen within older_than_seconds. Sweeps
+    CI per-job endpoints left behind by cancelled jobs that skipped cleanup.
+    Non-ephemeral endpoints are never touched. Returns the count removed."""
+    cutoff = datetime.now(timezone.utc).timestamp() - older_than_seconds
+    candidates = db.query(Endpoint).filter(Endpoint.ephemeral == 1).all()
+    _FMT = "%Y-%m-%dT%H:%M:%SZ"
+    removed = 0
+    for ep in candidates:
+        raw = ep.last_seen or ep.enrolled_at
+        if not raw:
+            # No timestamp at all — treat as infinitely old; prune it.
+            delete_endpoint(db, ep.id)
+            removed += 1
+            continue
+        try:
+            ts = datetime.strptime(raw, _FMT).replace(tzinfo=timezone.utc)
+        except ValueError:
+            # Unparseable timestamp: skip rather than silently prune everything.
+            continue
+        if ts.timestamp() < cutoff:
+            delete_endpoint(db, ep.id)
+            removed += 1
+    return removed
 
 
 def delete_endpoint(db: Session, eid: str) -> bool:

@@ -225,12 +225,16 @@ do_enroll() {
     machine_id=$(state_get "$STATE_FILE" machine_id)
     [ -n "$machine_id" ] || machine_id=$(gen_machine_id)
 
+    _enroll_extra=""
+    [ "$EPHEMERAL" = 1 ] && _enroll_extra="--data-urlencode ephemeral=1"
+    # shellcheck disable=SC2086
     resp=$(curl -fsS -X POST "$SERVER/api/enroll" \
         --data-urlencode "enroll_token=$ENROLL_TOKEN" \
         --data-urlencode "hostname=$(hostname)" \
         --data-urlencode "machine_id=$machine_id" \
         --data-urlencode "platform=$(platform)" \
-        --data-urlencode "tripwire_ids=$TRIPWIRES") || {
+        --data-urlencode "tripwire_ids=$TRIPWIRES" \
+        $_enroll_extra) || {
         err "enroll failed"; return 1; }
 
     AGENT_TOKEN=$(printf '%s\n' "$resp" | sed -n 's/^agent_token=//p' | head -n1)
@@ -349,10 +353,15 @@ plant() {  # plant <i>
         fi
         chmod 600 "$cf" 2>/dev/null || true
         { [ -p "$path" ] || [ -f "$path" ]; } && rm -f "$path"  # replace our own stale bait on re-plant
-        if ! mkfifo "$path" 2>/dev/null; then
-            rm -f "$cf"; err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
-        fi
+        # Record BEFORE mkfifo, not after: a clean-exit signal (INT/TERM) landing
+        # in the gap between creating the FIFO and recording it would otherwise
+        # leave the FIFO behind, because the teardown trap's remove_fifos only
+        # removes paths listed in the manifest. record_planted is idempotent;
+        # undo it if mkfifo fails so the manifest never lists a phantom path.
         record_planted "$path"
+        if ! mkfifo "$path" 2>/dev/null; then
+            forget_planted "$path"; rm -f "$cf"; err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
+        fi
         chmod 600 "$path" 2>/dev/null || true
         [ -n "$TARGET_USER" ] && chown "$TARGET_USER" "$path" 2>/dev/null || true
         report_plant "$id" planted
@@ -399,6 +408,7 @@ resync() {
 
 fire() {  # fire <i> <event_type> <process> <pid> <os_user> <accessed_path>
     FIRE_RETRIED=0
+    [ "${EPHEMERAL:-0}" = "1" ] && touch "$(dirname "$STATE_FILE")/triggered" 2>/dev/null || true
     _fire "$@"
 }
 
@@ -877,7 +887,14 @@ run() {
     # Remote kill: the heartbeat loop raises USR1 when the server flags us.
     trap 'self_destruct' USR1
 
+    if [ "$EPHEMERAL" = 1 ]; then
+        # CI per-job endpoint: on job end / SIGTERM, fully decommission (unplant +
+        # tell the server to drop the row) instead of just releasing the lock.
+        trap 'self_destruct' INT TERM EXIT
+    fi
+
     start_watcher
+    [ "$EPHEMERAL" = 1 ] && : > "$(dirname "$STATE_FILE")/ready" 2>/dev/null || true
 
     # No live sync: behave as before - block on the watcher.
     if ! [ "$SYNC_INTERVAL" -gt 0 ] 2>/dev/null; then
@@ -936,6 +953,7 @@ usage: thumper_agent.sh run --server URL --enroll-token TOKEN [options]
   --once               enroll + plant, then exit
   --simulate           fire a signed callback for each deployment, then exit
   --force              overwrite a path even if a file we didn't plant is there
+  --ephemeral          per-job CI endpoint; auto-decommissions on exit
 EOF
 }
 
@@ -949,7 +967,7 @@ usage() {
     exit "$code"
 }
 
-SERVER=""; ENROLL_TOKEN=""; TRIPWIRES=""; STATE_FILE=""; POLL=5; HEARTBEAT=60; SYNC_INTERVAL=300; ONCE=0; SIMULATE=0; FORCE=0; SENSOR=auto
+SERVER=""; ENROLL_TOKEN=""; TRIPWIRES=""; STATE_FILE=""; POLL=5; HEARTBEAT=60; SYNC_INTERVAL=300; ONCE=0; SIMULATE=0; FORCE=0; EPHEMERAL=0; SENSOR=auto
 
 case "${1:-}" in
     --help|-h) usage 0 ;;
@@ -973,6 +991,7 @@ while [ $# -gt 0 ]; do
         --once)         ONCE=1; shift ;;
         --simulate)     SIMULATE=1; shift ;;
         --force)        FORCE=1; shift ;;
+        --ephemeral)    EPHEMERAL=1; shift ;;
         *) err "unknown argument: $1"; usage ;;
     esac
 done

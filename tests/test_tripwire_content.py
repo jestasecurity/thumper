@@ -44,6 +44,21 @@ def test_post_tripwire_generates_and_stores_token(client_db):
     assert "AKIA" in row.token
 
 
+def test_post_tripwire_generates_npmrc_token(client_db):
+    tc, db = client_db
+    resp = tc.post("/api/tripwires", json={
+        "name": "npm-bait", "token_type": "npm",
+        "path": "~/.npmrc", "source": "template",
+    })
+    assert resp.status_code == 200
+    tid = resp.json()["id"]
+
+    db.expire_all()
+    row = store.get_tripwire(db, tid)
+    assert row.token is not None
+    assert row.token.startswith("//registry.npmjs.org/:_authToken=npm_")
+
+
 def test_enroll_uses_stored_tripwire_token(client_db):
     tc, db = client_db
 
