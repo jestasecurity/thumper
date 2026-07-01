@@ -44,3 +44,18 @@ def test_accepts_absolute_and_home_paths(client, ok):
     resp = _create(client, ok)
     assert resp.status_code == 200
     assert resp.json()["path"] == ok
+
+
+# A tab or newline in the path is injected unescaped into the tab-/newline-framed
+# /agent/deployments protocol, forging extra fields/records whose attacker-chosen
+# id is later eval'd by the root agent → unauth root RCE (#103). Reject any
+# control character at creation, the source of the path.
+@pytest.mark.parametrize("bad", [
+    "/tmp/x\ndp_evil}; reboot; :",   # newline → injects a whole TSV record
+    "/tmp/x\tsecret\tcb",            # tab → shifts/forges fields
+    "/tmp/x\rfoo",                   # carriage return
+    "~/.aws/cred\nx",                # newline in a home-rooted path
+    "/tmp/\x00null",                 # NUL / other control char
+])
+def test_rejects_control_chars_in_path(client, bad):
+    assert _create(client, bad).status_code == 400

@@ -90,12 +90,14 @@ All options overridable via environment:
 | `THUMPER_ALLOW_INSECURE_BASE_URL` | _(unset)_ | Opt-in to start with a plaintext non-loopback `BASE_URL` (otherwise the server refuses) |
 | `THUMPER_ENROLL_TOKEN` | `dev-enroll-token` | Shared token for agent enrollment |
 | `THUMPER_INSTALL_TOKEN` | `dev-install-token` | Gates `/install.sh` |
+| `THUMPER_ADMIN_TOKEN` | _(unset)_ | **Required** — gates the whole management/UI API; unset = management API disabled (503, fail-closed) |
 | `THUMPER_UI_DIST` | `./ui/dist` | Built SPA location |
 | `THUMPER_AGENT_PATH` | `./agent/thumper_agent.sh` | Agent script to serve |
 | `THUMPER_PLUGINS_DIR` | `./plugins` | Plugin discovery root |
 | `THUMPER_DASHBOARD_REFRESH` | `60` | Auto-refresh interval (seconds, 0 = off) |
 | `THUMPER_ALLOWED_HOOK_CIDRS` | _(unset)_ | Comma-separated CIDRs/IPs exempted from the SSRF guard for outbound integration targets |
 | `THUMPER_SECRET_KEY` | _(unset)_ | Encrypts integration credentials at rest (Fernet); unset stores them in plaintext |
+| `THUMPER_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated browser origins allowed by CORS (instead of wildcard) |
 
 ## Security & trust model
 
@@ -108,3 +110,12 @@ network MITM can serve a malicious agent and get root on endpoints. The server
 unless `THUMPER_ALLOW_INSECURE_BASE_URL=1` is set to opt in (which downgrades it
 to a startup warning, for a deliberately-isolated network). `http://localhost` is
 fine for development and is never flagged.
+
+**Management API auth.** The whole management/UI API (everything under `/api`
+except the agent-facing `/enroll`, `/install.sh`, `/agent/*`, `/trigger`) is
+gated by a shared admin token. Set `THUMPER_ADMIN_TOKEN` to a random secret;
+clients (the dashboard) send it as `Authorization: Bearer <token>`. This is
+**fail-closed**: with no token set, the management API returns `503` rather than
+serving open — a missing token disables the console instead of exposing it.
+Agent-facing routes keep their own per-purpose tokens (enroll/install/agent/HMAC)
+and are unaffected.
