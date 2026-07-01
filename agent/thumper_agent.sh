@@ -620,19 +620,29 @@ serve_fifo() {  # serve_fifo <i> - serve one bait FIFO forever; a read = a hit
     done
 }
 
-watch_fifo() {  # supervisor: one serve_fifo per bait, wait on them, re-serve on death
+watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any that dies
+    log "watching $DEP_COUNT bait file(s) via FIFO"
+    i=1
+    while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & eval "sf_pid_$i=\$!"; i=$((i + 1)); done
     while :; do
-        log "watching $DEP_COUNT bait file(s) via FIFO"
-        i=1
-        while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & i=$((i + 1)); done
-        wait
         [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
-        # Do NOT fall back to atime: the baits are still pipes, so a reader's
-        # open() blocks on the now-writerless FIFO, atime never moves, and nothing
-        # ever fires - "degraded to atime" looks healthy but detects zero (Roee
-        # #123 F3). Re-serve instead; this self-heals once verify_planted
-        # re-creates any deleted/tampered FIFO.
-        err "FIFO serving exited unexpectedly - re-serving in 1s"
+        i=1
+        while [ "$i" -le "$DEP_COUNT" ]; do
+            eval "_sp=\$sf_pid_$i _sf=\$dep_path_$i"
+            # Restart a writer that died while its FIFO still exists. Without this
+            # that ONE bait has no writer, any reader's open() blocks forever, and
+            # nothing fires - and verify_planted can't catch it because it only
+            # checks FIFO existence, not writer liveness (Roee #123 F3 residual).
+            # A bare `wait` can't do per-writer recovery: it blocks until ALL
+            # writers exit, so a single death among live siblings went unrecovered
+            # until the next full re-plant restart. And we must NOT fall back to
+            # atime: atime polling on a writerless pipe is silently blind.
+            if [ -p "$_sf" ] && ! kill -0 "$_sp" 2>/dev/null; then
+                serve_fifo "$i" & eval "sf_pid_$i=\$!"
+                log "restarted dead FIFO writer for bait $i"
+            fi
+            i=$((i + 1))
+        done
         sleep 1
     done
 }
@@ -806,10 +816,12 @@ run() {
             fire "$i" open simulated "$$" "${USER:-$(id -un)}" ""
             i=$((i + 1))
         done
-        # --simulate exits before the cleanup traps are armed, so sweep any FIFO
-        # bait now: a leftover no-reader pipe blocks every real open() forever
-        # (e.g. a process reading ~/.aws/credentials) - Roee #123 F2.
+        # --simulate exits before the cleanup traps are armed, so clean up now:
+        # sweep any FIFO bait (a leftover no-reader pipe blocks every real open()
+        # forever) AND remove the cached fake-credential content it planted -
+        # test-only mode shouldn't leave either behind (Roee #123 F2).
         [ "$FIFO_MODE" = 1 ] && remove_fifos
+        [ -n "${BAITCACHE:-}" ] && [ -d "$BAITCACHE" ] && rm -rf "$BAITCACHE"
         return 0
     fi
     [ "$ONCE" = "1" ] && return 0
