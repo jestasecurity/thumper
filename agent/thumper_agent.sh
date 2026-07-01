@@ -68,6 +68,29 @@ probe_fifo_mode() {  # AUTO policy: default to FIFO on macOS only (Linux default
     [ "$(platform)" = "darwin" ] || return 0
     mkfifo_works && FIFO_MODE=1
 }
+# effective_sensor <i>: which sensor governs THIS bait. Precedence:
+#   1. an explicit operator --sensor (fifo|atime) - an intentional override that
+#      must win over the server (#164 F2): the operator opted out of/into FIFOs;
+#   2. the deployment's OWN sensor when the server sent one (dual-plant pairs);
+#   3. the platform default.
+# Lets one agent run a FIFO bait and an atime bait side by side.
+effective_sensor() {
+    case "$SENSOR" in fifo|atime) printf '%s' "$SENSOR"; return 0 ;; esac
+    eval "_es=\${dep_sensor_$1:-}"
+    [ -n "$_es" ] && { printf '%s' "$_es"; return 0; }
+    if [ "$FIFO_MODE" = 1 ]; then printf 'fifo'
+    elif [ "$(platform)" = linux ] && command -v inotifywait >/dev/null 2>&1; then printf 'inotify'
+    else printf 'atime'; fi
+}
+has_explicit_sensors() {  # 0 if any deployment carries its own sensor (server is sending pairs)
+    _i=1
+    while [ "$_i" -le "$DEP_COUNT" ]; do
+        eval "_s=\${dep_sensor_$_i:-}"
+        [ -n "$_s" ] && return 0
+        _i=$((_i + 1))
+    done
+    return 1
+}
 cache_path() { printf '%s/%s' "$BAITCACHE" "$1"; }   # cache_path <deployment-id>
 TAB=$(printf '\t')
 
@@ -258,7 +281,7 @@ pull_deployments() {
     oldifs=$IFS
     IFS="$TAB"
     # `printf | while` would subshell the counters away; feed via a here-doc.
-    while IFS="$TAB" read -r id path secret content_url callback_url; do
+    while IFS="$TAB" read -r id path secret content_url callback_url sensor; do
         [ -n "$id" ] || continue
         DEP_COUNT=$((DEP_COUNT + 1))
         eval "dep_id_$DEP_COUNT=\$id"
@@ -266,6 +289,7 @@ pull_deployments() {
         eval "dep_secret_$DEP_COUNT=\$secret"
         eval "dep_content_$DEP_COUNT=\$content_url"
         eval "dep_callback_$DEP_COUNT=\$callback_url"
+        eval "dep_sensor_$DEP_COUNT=\${sensor:-}"   # per-deployment sensor (fifo|atime|inotify); empty = use global default
         eval "dep_last_$DEP_COUNT=0"
     done <<EOF
 $body
@@ -344,7 +368,7 @@ plant() {  # plant <i>
         return 1
     fi
 
-    if [ "$FIFO_MODE" = 1 ]; then
+    if [ "$(effective_sensor "$1")" = fifo ]; then
         mkdir -p "$BAITCACHE"
         chmod 700 "$BAITCACHE" 2>/dev/null || true
         cf=$(cache_path "$id")
@@ -570,19 +594,26 @@ arm_atime() {  # arm_atime <path>: set atime to the past so the next read bumps 
 read_atime() {  # read_atime <path>: portable access-time epoch (GNU %X first, then BSD %a - never %a on Linux, that's free blocks: #28)
     stat -c %X "$1" 2>/dev/null || stat -f %a "$1" 2>/dev/null || echo 0
 }
-watch_atime() {
-    log "atime poll every ${POLL}s on regular-file bait (re-armable; detection only - no process/user)"
-    i=1
-    while [ "$i" -le "$DEP_COUNT" ]; do
+all_indices() {  # "1 2 ... DEP_COUNT" - every deployment
+    _ai=""; _i=1
+    while [ "$_i" -le "$DEP_COUNT" ]; do _ai="$_ai $_i"; _i=$((_i + 1)); done
+    printf '%s' "$_ai"
+}
+# atime_poll "<idx idx ...>": arm + re-armable-poll only the given deployments.
+# The index list lets the mixed watcher poll just the atime baits while FIFO
+# baits are served separately; watch_atime() polls all (homogeneous + fallback).
+atime_poll() {
+    log "atime poll every ${POLL}s on regular-file bait(s) (re-armable; detection only - no process/user)"
+    # shellcheck disable=SC2086  # $1 is a space-separated index list; splitting is intended
+    for i in $1; do
         eval "p=\$dep_path_$i"
         arm_atime "$p"                                  # arm so relatime bumps atime on a read
         eval "atime_$i=\$(read_atime \"\$p\")"
-        i=$((i + 1))
     done
     while true; do
         sleep "$POLL"
-        i=1
-        while [ "$i" -le "$DEP_COUNT" ]; do
+        # shellcheck disable=SC2086
+        for i in $1; do
             eval "p=\$dep_path_$i prev=\$atime_$i"
             cur=$(read_atime "$p")
             if [ "$cur" != "0" ] && [ "$cur" -gt "$prev" ] 2>/dev/null; then
@@ -590,10 +621,10 @@ watch_atime() {
                 arm_atime "$p"                          # RE-ARM so the NEXT read is detectable too
                 eval "atime_$i=\$(read_atime \"\$p\")"
             fi
-            i=$((i + 1))
         done
     done
 }
+watch_atime() { atime_poll "$(all_indices)"; }   # poll every bait (homogeneous atime mode + degradation fallback)
 
 # ── live sync (re-pull + reconcile) ───────────────────────────────────────────
 # A running agent re-pulls its deployment set every --sync-interval and applies
@@ -681,9 +712,32 @@ watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any th
     done
 }
 
+# Dual-plant: each deployment runs under its OWN sensor. FIFO baits (canonical,
+# definitive pid) are served individually; atime/inotify baits (companion,
+# detection) are atime-polled as a group. Used whenever the server sends pairs.
+watch_mixed() {
+    log "watching $DEP_COUNT bait(s) with per-deployment sensors"
+    _atidx=""; i=1
+    while [ "$i" -le "$DEP_COUNT" ]; do
+        if [ "$(effective_sensor "$i")" = fifo ]; then
+            serve_fifo "$i" &
+        else
+            _atidx="$_atidx $i"                         # atime/inotify/unknown -> atime poll (detection)
+        fi
+        i=$((i + 1))
+    done
+    [ -n "$_atidx" ] && atime_poll "$_atidx" &
+    wait
+    [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+    err "mixed watcher exited unexpectedly - degrading to atime poll"
+    atime_poll "$(all_indices)"
+}
+
 start_watcher() {  # launch the right sensor in the background; set WATCH_PID
     rm -f "${WATCH_STOP_FLAG:-}" 2>/dev/null || true   # this start is not a stop
-    if [ "$SENSOR" = atime ]; then
+    if has_explicit_sensors; then
+        watch_mixed &                                   # per-deployment sensors (dual-plant pairs)
+    elif [ "$SENSOR" = atime ]; then
         watch_atime &                                   # forced atime sensor (any platform)
     elif [ "$FIFO_MODE" = 1 ]; then
         watch_fifo &
@@ -769,7 +823,7 @@ verify_planted() {
             # and never re-plant through it (curl -o would write the target); report
             # failed so the lost coverage is visible.
             report_plant "$vid" failed
-        elif [ "$FIFO_MODE" = 1 ] && [ -e "$p" ] && ! [ -p "$p" ]; then
+        elif [ "$(effective_sensor "$i")" = fifo ] && [ -e "$p" ] && ! [ -p "$p" ]; then
             # A regular file where our FIFO should be = tampering/replacement.
             # Recover like the "missing" branch below: plant() removes the impostor
             # (our own path) and re-creates the FIFO, then REPLANTED restarts the
