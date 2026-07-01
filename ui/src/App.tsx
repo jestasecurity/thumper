@@ -18,6 +18,7 @@ import EndpointDetail from "./pages/EndpointDetail.tsx";
 import Integrations from "./pages/Integrations.tsx";
 import Settings from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import AdminGate from "./AdminGate.tsx";
 
 // How long to show the animated logo after a sidebar toggle, in ms. Tracks the
 // length of the one-thump GIF (ui/public/thumper_gif.gif, ~2.46s) plus a small
@@ -109,6 +110,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   return (
+    <AdminGate>
     <div className={`app ${collapsed ? "collapsed" : ""}`}>
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <main className="main">
@@ -125,5 +127,6 @@ export default function App() {
         </Routes>
       </main>
     </div>
+    </AdminGate>
   );
 }

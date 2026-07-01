@@ -12,8 +12,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import __version__
-from .api import router
+from . import __version__, config
+from .api import agent_router, router
 from .config import (
     UI_DIST, base_url_fail_closed, insecure_base_url, insecure_default_tokens)
 from .db import init_db
@@ -37,6 +37,11 @@ async def lifespan(app: FastAPI):
         log.warning(
             "SECURITY: integration secrets are stored UNENCRYPTED at rest - set "
             "THUMPER_SECRET_KEY to encrypt them (#24).")
+    if not config.ADMIN_TOKEN:
+        log.warning(
+            "THUMPER_ADMIN_TOKEN is not set - the management/UI API is DISABLED "
+            "(503) until you set it (fail-closed, #20). The dashboard can't load "
+            "without it; set it to a random secret.")
     # MITM on a plaintext non-loopback BASE_URL is agent/bait fetch + callbacks in
     # cleartext -> a malicious agent served to the endpoint -> root RCE. Severe
     # enough to fail closed: refuse to start unless the operator opts in.
@@ -68,7 +73,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
+app.include_router(router)        # management/UI API — admin-token gated
+app.include_router(agent_router)  # agent-facing API — own per-purpose tokens
 
 
 @app.get("/healthz")

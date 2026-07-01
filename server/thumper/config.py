@@ -87,6 +87,12 @@ ENROLL_TOKEN = os.environ.get("THUMPER_ENROLL_TOKEN", _DEFAULT_ENROLL_TOKEN)
 _DEFAULT_INSTALL_TOKEN = "dev-install-token"
 INSTALL_TOKEN = os.environ.get("THUMPER_INSTALL_TOKEN", _DEFAULT_INSTALL_TOKEN)
 
+# Admin token gating the whole management/UI API (#20). NO default on purpose:
+# fail closed. When unset, the management API is disabled (503) rather than
+# served open - a dev default would just recreate the no-auth hole. Set
+# THUMPER_ADMIN_TOKEN to a random secret to enable the dashboard/API.
+ADMIN_TOKEN = os.environ.get("THUMPER_ADMIN_TOKEN", "")
+
 
 def insecure_default_tokens(enroll: str | None = None, install: str | None = None) -> list[str]:
     """Names of the shared tokens still set to their built-in dev defaults.
