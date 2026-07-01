@@ -27,6 +27,21 @@ if (!server)    { error('thumper: input "server" is required');       process.ex
 if (!enrollTok) { error('thumper: input "enroll-token" is required'); process.exit(1); }
 if (!tripwires) { error('thumper: input "tripwires" is required');     process.exit(1); }
 
+// The agent fetched below is EXECUTED on the runner, so the fetch channel must be
+// authenticated: a plain-http server URL lets a network MITM swap in arbitrary
+// code (Aviv, #150). Require https for any real server; loopback is exempt since
+// there is no network path to intercept.
+function isLoopbackHost(u) {
+  try {
+    const h = new URL(u).hostname.replace(/^\[|\]$/g, '');
+    return h === 'localhost' || h === '127.0.0.1' || h === '::1';
+  } catch { return false; }
+}
+if (!/^https:\/\//i.test(server) && !isLoopbackHost(server)) {
+  error('thumper: "server" must use https:// - the agent is downloaded and executed on the runner, so plain http would let a network attacker run arbitrary code. Use an https URL (a loopback URL is allowed for local testing).');
+  process.exit(1);
+}
+
 // ── state dir ─────────────────────────────────────────────────────────────────
 // mkdtempSync creates a unique, 0700 directory atomically. A predictable name
 // in the temp dir (esp. the os.tmpdir() fallback) is a symlink/race target -

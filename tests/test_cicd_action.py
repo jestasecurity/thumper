@@ -211,3 +211,33 @@ def test_post_exits_0_when_no_state():
             f"expected exit 0 when no state, got {result.returncode}\n"
             f"stdout: {result.stdout}"
         )
+
+
+# ── https-only agent fetch (Aviv #150) ────────────────────────────────────────
+def _run_main(server):
+    env = {
+        **os.environ,
+        "INPUT_SERVER": server,
+        "INPUT_ENROLL-TOKEN": "t",
+        "INPUT_TRIPWIRES": "tw_1",
+    }
+    return subprocess.run(
+        ["node", str(ACTION_DIR / "main.js")],
+        env=env, capture_output=True, text=True, timeout=20,
+    )
+
+
+def test_main_js_rejects_plain_http_server():
+    # The agent is fetched AND executed on the runner, so a plain-http server URL
+    # lets a network MITM run arbitrary code. It must be rejected before any fetch.
+    r = _run_main("http://evil.example.com")
+    assert r.returncode == 1, "plain-http server URL should be rejected"
+    assert "must use https" in (r.stdout + r.stderr)
+
+
+def test_main_js_allows_loopback_http():
+    # Loopback has no network path to MITM, so http://127.0.0.1 is exempt: it must
+    # pass the https guard (it fails later at the connection, not at the guard).
+    r = _run_main("http://127.0.0.1:8000")
+    assert "must use https" not in (r.stdout + r.stderr), \
+        "loopback http should pass the https guard"
