@@ -12,10 +12,11 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import __version__
-from .api import router
+from . import __version__, config
+from .api import agent_router, router
 from .config import (
-    UI_DIST, base_url_fail_closed, insecure_base_url, insecure_default_tokens)
+    ALLOWED_ORIGINS, UI_DIST, base_url_fail_closed, insecure_base_url,
+    insecure_default_tokens)
 from .db import init_db
 from .services.secrets_crypto import encryption_enabled
 
@@ -37,6 +38,11 @@ async def lifespan(app: FastAPI):
         log.warning(
             "SECURITY: integration secrets are stored UNENCRYPTED at rest - set "
             "THUMPER_SECRET_KEY to encrypt them (#24).")
+    if not config.ADMIN_TOKEN:
+        log.warning(
+            "THUMPER_ADMIN_TOKEN is not set - the management/UI API is DISABLED "
+            "(503) until you set it (fail-closed, #20). The dashboard can't load "
+            "without it; set it to a random secret.")
     # MITM on a plaintext non-loopback BASE_URL is agent/bait fetch + callbacks in
     # cleartext -> a malicious agent served to the endpoint -> root RCE. Severe
     # enough to fail closed: refuse to start unless the operator opts in.
@@ -59,16 +65,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Thumper", version=__version__, lifespan=lifespan)
 
-# In dev the UI runs on :5173 and proxies /api → :8000, so it's same-origin to
-# the browser; CORS is permissive here to keep direct API calls / tools simple.
+# CORS restricted to an allow-list (#23) - the Vite dev origin by default,
+# THUMPER_ALLOWED_ORIGINS in production. In monolith mode the UI is same-origin.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["authorization", "content-type"],
 )
 
-app.include_router(router)
+app.include_router(router)        # management/UI API — admin-token gated
+app.include_router(agent_router)  # agent-facing API — own per-purpose tokens
 
 
 @app.get("/healthz")
