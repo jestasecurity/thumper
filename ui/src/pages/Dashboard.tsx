@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [flash, setFlash] = useState(false);
   const [filter, setFilter] = useState<AlertFilter>("open");
   const nav = useNavigate();
-  const countdownRef = useRef<ReturnType<typeof setInterval>>();
+  const countdownRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const PAGE_TITLE = "Dashboard";
 
   const reload = useCallback(() => {
