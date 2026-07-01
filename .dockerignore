@@ -1,0 +1,25 @@
+# Keep the Docker build context to source only. Without this, `COPY ui/ ./`
+# pulls a developer's local ui/node_modules into the image - overriding the
+# clean `npm ci` layer, breaking reproducibility and bloating the image (#148).
+.git
+.github
+.gitignore
+
+# Node / UI build artifacts (rebuilt inside the image)
+**/node_modules
+ui/dist
+**/*.tsbuildinfo
+
+# Python caches / local envs
+**/__pycache__
+**/*.py[cod]
+.venv
+venv/
+.pytest_cache
+*.egg-info
+
+# Local data / secrets / db (never belong in an image)
+data/
+*.db
+*.db-*
+.env

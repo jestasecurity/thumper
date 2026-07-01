@@ -34,3 +34,34 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+  ui-build:
+    # The UI was previously unbuilt in CI, so a dependency bump could break
+    # `npm run build` (tsc + vite) with all checks still green (#148).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26" # match the Dockerfile's node base
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI deps
+        run: npm ci
+        working-directory: ui
+
+      - name: Build UI
+        run: npm run build
+        working-directory: ui
+
+  docker-build:
+    # Build the monolith image so base-image bumps and Dockerfile breakage are
+    # caught in CI rather than at deploy time (#148).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build -t thumper:ci .
