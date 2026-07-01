@@ -9,6 +9,7 @@ Two distinct contracts live here:
 """
 import hmac
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
@@ -55,6 +56,7 @@ router = APIRouter(prefix="/api")
 log = logging.getLogger("thumper.api")
 
 _STALE_WINDOW = timedelta(minutes=15)
+_last_ephemeral_prune = 0.0
 _INACTIVE_WINDOW = timedelta(hours=12)
 
 
@@ -156,6 +158,7 @@ def _endpoint_out(db, endpoint, *, deployment_count=None, triggered_count=None) 
         status=_endpoint_status_full(endpoint),
         deployment_count=deployment_count,
         triggered_count=triggered_count,
+        ephemeral=bool(endpoint.ephemeral),
     )
 
 
@@ -296,6 +299,11 @@ def build_install_for_set(tripwire: list[str] = Query(default=[]),
 # ── endpoints ────────────────────────────────────────────────────────────────
 @router.get("/endpoints", response_model=list[EndpointOut])
 def list_endpoints(db: Session = Depends(get_db)):
+    global _last_ephemeral_prune
+    _now = time.monotonic()
+    if _now - _last_ephemeral_prune > 60:
+        store.prune_stale_ephemeral(db)
+        _last_ephemeral_prune = _now
     deployed = store.deployment_counts_by_endpoint(db)
     triggered = store.alert_counts_by_endpoint(db)
     return [_endpoint_out(db, endpoint,
@@ -618,7 +626,8 @@ async def enroll(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(401, "invalid enroll token")
     endpoint = store.enroll_endpoint(db, hostname=field("hostname"),
                                      platform=field("platform") or None,
-                                     machine_id=field("machine_id"))
+                                     machine_id=field("machine_id"),
+                                     ephemeral=field("ephemeral") == "1")
     # Materialize a unique instance for each tripwire this install is scoped to.
     for tid in [t.strip() for t in field("tripwire_ids").split(",") if t.strip()]:
         tripwire = store.get_tripwire(db, tid)
