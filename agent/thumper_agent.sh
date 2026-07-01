@@ -16,34 +16,32 @@
 #   4. WATCH   - detect reads and POST an HMAC-signed, enriched callback per
 #                deployment. A read is the signal.
 #
-# Root is NOT needed to plant a user-space bait (~/.aws, ~/.config, ~/.ssh) or for
-# the attacker to read it - Shai-Hulud runs as the dev user, who owns the file.
-# Root is only needed to (a) plant in a system path like /etc/ssh, or (b) run the
-# macOS fs_usage sensor below.
+# Root is NOT needed to plant a user-space bait (~/.aws, ~/.config, ~/.ssh) or to
+# detect reads — the agent runs as the dev user who owns the file. Root is only
+# needed to plant bait in a system path like /etc/ssh.
 #
 # Read detection:
-#   • macOS : `fs_usage`, pre-filtered with grep to ONLY our bait paths before
-#             anything else touches it (so we don't process the whole firehose).
-#             Yields the offending process + (looked-up) user. Needs root.
+#   • macOS : FIFO named-pipe bait (unprivileged). The agent serves bait content
+#             to any opener; `open(O_WRONLY)` blocks until a reader connects, so
+#             every read is a guaranteed, synchronous event. No elevated privileges.
 #   • Linux : `inotifywait` IN_ACCESS on the bait files (reliable, unprivileged).
 #             inotify reports the event but not the accessing process, so alerts
 #             are path-only (no process/pid/user). Needs the inotify-tools package.
-#   • else  : st_atime poll fallback. NOTE: best-effort only - many systems
-#             update atime lazily or not at all, so this can miss reads. The real
-#             sensors above are preferred; this is the last resort.
+#   • else  : st_atime poll fallback. Best-effort only - many systems update atime
+#             lazily or not at all, so this can miss reads. Last resort.
 #
-# Example (the shape an MDM/SSH deploy pushes; run as root for fs_usage):
-#   sudo sh thumper_agent.sh run \
+# Example (the shape an MDM/SSH deploy pushes):
+#   sh thumper_agent.sh run \
 #       --server http://localhost:8000 --enroll-token dev-enroll-token \
 #       --tripwire tw_ab12cd34
+#   # (sudo only if planting in a system path like /etc/ssh)
 
 set -eu
 
 DEFAULT_STATE="$HOME/.thumper/agent.json"
 AGENT_VERSION="0.1.0"
-READ_OPS="open read RdData pread readlink mmap"
 # macOS background daemons that legitimately touch files (indexing/backup/security).
-NOISE_PROCS="fs_usage sh bash thumper_agent curl mds mds_stores mdworker mdworker_shared mdbulkimport mdflagwriter mdsync fseventsd backupd tccd syspolicyd XProtect XprotectService quicklookd Spotlight mdiagnosticd"
+NOISE_PROCS="sh bash thumper_agent curl mds mds_stores mdworker mdworker_shared mdbulkimport mdflagwriter mdsync fseventsd backupd tccd syspolicyd XProtect XprotectService quicklookd Spotlight mdiagnosticd"
 DEBOUNCE_SECS=3
 REPLANT_MAX=3   # max re-plant attempts per deployment before giving up (verify pass)
 # After a callback is rejected with 401 (server no longer knows this deployment -
@@ -52,6 +50,22 @@ REPLANT_MAX=3   # max re-plant attempts per deployment before giving up (verify 
 # enroll storm.
 RESYNC_COOLDOWN=30
 LAST_RESYNC=0
+# FIFO sensor: bait is a named pipe the agent serves. Probed once against the
+# state dir's filesystem; if mkfifo is unavailable there we fall back to the
+# (fixed) atime poll. Bait content is cached to BAITCACHE so the per-bait
+# serving loop can re-serve it on every read.
+FIFO_MODE=0
+BAITCACHE=""
+REPLANTED=0
+probe_fifo_mode() {
+    FIFO_MODE=0
+    [ "$(platform)" = "darwin" ] || return 0  # FIFO sensor is macOS-only; Linux uses inotify
+    command -v mkfifo >/dev/null 2>&1 || return 0
+    _probe="$(dirname "$STATE_FILE")/.fifoprobe.$$"
+    if mkfifo "$_probe" 2>/dev/null; then rm -f "$_probe"; FIFO_MODE=1; fi
+    unset _probe
+}
+cache_path() { printf '%s/%s' "$BAITCACHE" "$1"; }   # cache_path <deployment-id>
 TAB=$(printf '\t')
 
 log() { printf '[thumper %s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
@@ -171,7 +185,7 @@ gen_machine_id() {
 
 platform() { uname -s | tr 'A-Z' 'a-z'; }   # darwin | linux
 
-# ── target user / path expansion (when running as root for fs_usage) ──────────
+# ── target user / path expansion (when running as root for system-path planting) ──
 # Resolve the real desktop/dev user so bait lands in THEIR home and is owned by
 # them (the threat reads as that user), not /var/root.
 TARGET_USER=""
@@ -327,6 +341,31 @@ plant() {  # plant <i>
         return 1
     fi
 
+    if [ "$FIFO_MODE" = 1 ]; then
+        mkdir -p "$BAITCACHE"
+        chmod 700 "$BAITCACHE" 2>/dev/null || true
+        cf=$(cache_path "$id")
+        if ! curl -fsS "$url" -H "Authorization: Bearer $AGENT_TOKEN" -o "$cf"; then
+            rm -f "$cf"; err "failed to fetch bait for $id"; report_plant "$id" failed; return 1
+        fi
+        chmod 600 "$cf" 2>/dev/null || true
+        { [ -p "$path" ] || [ -f "$path" ]; } && rm -f "$path"  # replace our own stale bait on re-plant
+        # Record BEFORE mkfifo, not after: a clean-exit signal (INT/TERM) landing
+        # in the gap between creating the FIFO and recording it would otherwise
+        # leave the FIFO behind, because the teardown trap's remove_fifos only
+        # removes paths listed in the manifest. record_planted is idempotent;
+        # undo it if mkfifo fails so the manifest never lists a phantom path.
+        record_planted "$path"
+        if ! mkfifo "$path" 2>/dev/null; then
+            forget_planted "$path"; rm -f "$cf"; err "mkfifo failed at $path - skipping $id"; report_plant "$id" failed; return 1
+        fi
+        chmod 600 "$path" 2>/dev/null || true
+        [ -n "$TARGET_USER" ] && chown "$TARGET_USER" "$path" 2>/dev/null || true
+        report_plant "$id" planted
+        log "planted (fifo) $id -> $path"
+        return 0
+    fi
+
     if ! curl -fsS "$url" -H "Authorization: Bearer $AGENT_TOKEN" -o "$path"; then
         rm -f "$path"   # remove the partial/empty file curl may have left
         err "failed to fetch bait for $id"
@@ -386,8 +425,8 @@ _fire() {
             if [ "$FIRE_RETRIED" = "0" ] && resync; then
                 FIRE_RETRIED=1
                 # NOTE: recovers a rotated deployment id/secret for an EXISTING
-                # tripwire+path. If the path itself changed, the fs_usage grep
-                # filter won't see future reads until the watcher restarts.
+                # tripwire+path. After resync, dep_index_for_line re-matches the
+                # path against the refreshed deployment set.
                 new_idx=$(dep_index_for_line "$accessed_path") || {
                     err "callback REJECTED - path not deployed after re-enroll ($summary)"; return 0; }
                 _fire "$new_idx" "$event_type" "$process" "$pid" "$os_user" "$accessed_path"
@@ -448,6 +487,7 @@ self_destruct() {
     # Remove only the files we created, then rmdir. No `rm -rf` on a derived path:
     # rmdir is non-recursive and refuses a non-empty dir, so a misconfigured
     # --state-file can never wipe '/', $HOME, or anything we didn't plant here.
+    rm -rf "$BAITCACHE" 2>/dev/null || true   # fake creds must not linger after decommission
     rm -f "$STATE_FILE" "$MANIFEST_FILE" "$dir/agent.log" "$dir/thumper_agent.sh"
     rmdir "$dir" 2>/dev/null || log "left $dir in place (not empty)"
     log "agent removed"
@@ -464,44 +504,7 @@ dep_index_for_line() {  # echo the deployment index whose path appears in the li
     return 1
 }
 
-is_read_op() { for op in $READ_OPS; do [ "$op" = "$1" ] && return 0; done; return 1; }
 is_noise()   { for n in $NOISE_PROCS; do [ "$n" = "$1" ] && return 0; done; return 1; }
-
-watch_fs_usage() {
-    # Build a grep filter of just our bait paths so fs_usage's firehose is trimmed
-    # at the source - the shell loop only ever sees lines about our files.
-    set --
-    i=1
-    while [ "$i" -le "$DEP_COUNT" ]; do
-        eval "p=\$dep_path_$i"
-        set -- "$@" -e "$p"
-        i=$((i + 1))
-    done
-
-    cmd="fs_usage -w -f filesys"
-    [ "$(id -u)" = "0" ] || cmd="sudo -n $cmd"
-    command -v fs_usage >/dev/null 2>&1 || return 1
-
-    log "watching $DEP_COUNT bait file(s) via fs_usage"
-    # shellcheck disable=SC2086
-    $cmd 2>/dev/null | grep --line-buffered -F "$@" | while read -r line; do
-        op=$(printf '%s' "$line" | awk '{print $2}')
-        is_read_op "$op" || continue
-        idx=$(dep_index_for_line "$line") || continue
-        last_field=$(printf '%s' "$line" | awk '{print $NF}')
-        process=$(printf '%s' "$last_field" | sed 's/\.[0-9][0-9]*$//')
-        pid=$(printf '%s' "$last_field" | sed -n 's/.*\.\([0-9][0-9]*\)$/\1/p')
-        is_noise "$process" && continue
-        now=$(date +%s)
-        eval "last=\$dep_last_$idx"
-        [ $((now - last)) -lt "$DEBOUNCE_SECS" ] && continue
-        eval "dep_last_$idx=\$now"
-        eval "watched=\$dep_path_$idx"
-        os_user=""; [ -n "$pid" ] && os_user=$(user_of_pid "$pid")
-        fire "$idx" "$op" "$process" "$pid" "$os_user" "$watched"
-    done
-    return 0
-}
 
 watch_inotify() {
     # Linux read sensor: inotify IN_ACCESS fires on read. `%w` is the watched
@@ -546,11 +549,11 @@ watch_inotify() {
 }
 
 watch_atime() {
-    log "fs_usage unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
+    log "mkfifo unavailable - atime poll every ${POLL}s (best-effort; may miss reads, no process/user)"
     i=1
     while [ "$i" -le "$DEP_COUNT" ]; do
         eval "p=\$dep_path_$i"
-        eval "atime_$i=\$(stat -f %a \"\$p\" 2>/dev/null || stat -c %X \"\$p\" 2>/dev/null || echo 0)"
+        eval "atime_$i=\$(stat -c %X \"\$p\" 2>/dev/null || stat -f %a \"\$p\" 2>/dev/null || echo 0)"
         i=$((i + 1))
     done
     while true; do
@@ -558,7 +561,7 @@ watch_atime() {
         i=1
         while [ "$i" -le "$DEP_COUNT" ]; do
             eval "p=\$dep_path_$i prev=\$atime_$i"
-            cur=$(stat -f %a "$p" 2>/dev/null || stat -c %X "$p" 2>/dev/null || echo 0)
+            cur=$(stat -c %X "$p" 2>/dev/null || stat -f %a "$p" 2>/dev/null || echo 0)
             if [ "$cur" != "0" ] && [ "$cur" -gt "$prev" ] 2>/dev/null; then
                 eval "atime_$i=\$cur"
                 fire "$i" "atime-change" "" "" "" "$p"
@@ -593,15 +596,71 @@ plant_all() {  # plant every current deployment; sets `planted`
     done
 }
 
+# attribute <fifo> : best-effort set globals pid/process/os_user to the reader's.
+# lsof <path> does NOT report FIFO openers on macOS; full-scan and match by inode.
+attribute() {  # attribute <fifo> ; best-effort set globals pid/process/os_user
+    pid=""; process=""; os_user=""
+    command -v lsof >/dev/null 2>&1 || return 0
+    ino=$(stat -f %i "$1" 2>/dev/null || stat -c %i "$1" 2>/dev/null) || return 0
+    [ -n "$ino" ] || return 0
+    # Full scan: pick the process whose fd on THIS inode is open for READ (4r) and
+    # is not our serve subshell ($$). Inode matched as a standalone field so a
+    # blank DEVICE column can't shift parsing.
+    pid=$(lsof -nP 2>/dev/null | awk -v ino="$ino" -v me="$$" '
+        index($0,"FIFO") && $2!=me && $4 ~ /r$/ && $0 ~ ("(^|[[:space:]])" ino "([[:space:]]|$)") { print $2; exit }')
+    [ -n "$pid" ] || { pid=""; return 0; }
+    process=$(ps -o comm= -p "$pid" 2>/dev/null | sed 's#.*/##' | tr -d ' ')
+    os_user=$(user_of_pid "$pid")
+}
+
+serve_fifo() {  # serve_fifo <i> - serve one bait FIFO forever; a read = a hit
+    eval "fifo=\$dep_path_$1 id=\$dep_id_$1"
+    cf=$(cache_path "$id")
+    trap '' PIPE                                    # a reader closing early must not kill us
+    while [ -p "$fifo" ]; do
+        exec 3>"$fifo" || break                     # open(O_WRONLY) BLOCKS until a reader opens
+        attribute "$fifo"                           # reader is parked in read(); grab it before we write
+        cat "$cf" >&3 2>/dev/null || true           # serve bait into the held fd (ignore EPIPE)
+        exec 3>&-                                    # close -> reader gets EOF
+        now=$(date +%s); eval "last=\${dep_last_$1:-0}"
+        if [ $((now - last)) -ge "$DEBOUNCE_SECS" ]; then
+            eval "dep_last_$1=\$now"
+            is_noise "$process" || fire "$1" open "$process" "$pid" "$os_user" "$fifo"
+        fi
+    done
+}
+
+watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any that dies
+    log "watching $DEP_COUNT bait file(s) via FIFO"
+    i=1
+    while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & eval "sf_pid_$i=\$!"; i=$((i + 1)); done
+    while :; do
+        [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+        i=1
+        while [ "$i" -le "$DEP_COUNT" ]; do
+            eval "_sp=\$sf_pid_$i _sf=\$dep_path_$i"
+            # Restart a writer that died while its FIFO still exists. Without this
+            # that ONE bait has no writer, any reader's open() blocks forever, and
+            # nothing fires - and verify_planted can't catch it because it only
+            # checks FIFO existence, not writer liveness (Roee #123 F3 residual).
+            # A bare `wait` can't do per-writer recovery: it blocks until ALL
+            # writers exit, so a single death among live siblings went unrecovered
+            # until the next full re-plant restart. And we must NOT fall back to
+            # atime: atime polling on a writerless pipe is silently blind.
+            if [ -p "$_sf" ] && ! kill -0 "$_sp" 2>/dev/null; then
+                serve_fifo "$i" & eval "sf_pid_$i=\$!"
+                log "restarted dead FIFO writer for bait $i"
+            fi
+            i=$((i + 1))
+        done
+        sleep 1
+    done
+}
+
 start_watcher() {  # launch the right sensor in the background; set WATCH_PID
-    # fs_usage needs root, but watch_fs_usage runs it under `sudo -n` when we are
-    # not root - so a non-root Mac with passwordless sudo still gets the real
-    # sensor. Probe that capability instead of gating on `id -u = 0`, which would
-    # silently downgrade such hosts to the lossy atime poll.
     rm -f "${WATCH_STOP_FLAG:-}" 2>/dev/null || true   # this start is not a stop
-    if [ "$(platform)" = "darwin" ] && command -v fs_usage >/dev/null 2>&1 \
-       && { [ "$(id -u)" = "0" ] || sudo -n true >/dev/null 2>&1; }; then
-        watch_fs_usage &
+    if [ "$FIFO_MODE" = 1 ]; then
+        watch_fifo &
     elif [ "$(platform)" = "linux" ] && command -v inotifywait >/dev/null 2>&1; then
         watch_inotify &
     else
@@ -610,15 +669,23 @@ start_watcher() {  # launch the right sensor in the background; set WATCH_PID
     WATCH_PID=$!
 }
 
-stop_watcher() {  # kill the watcher AND its fs_usage/grep children
+stop_watcher() {  # kill the watcher AND its serve_fifo children
     [ -n "${WATCH_PID:-}" ] || return 0
     : > "${WATCH_STOP_FLAG:-/dev/null}" 2>/dev/null || true  # mark stop deliberate
-    # Reap children FIRST. Killing the subshell first makes the kernel reparent
-    # fs_usage/grep to PID 1, after which `pkill -P "$WATCH_PID"` matches nothing
-    # and leaks a root fs_usage on every reconcile.
+    # Reap children FIRST. Killing the parent subshell first reparents the
+    # serve_fifo / inotifywait children to PID 1, after which `pkill -P` matches
+    # nothing and leaks them on every reconcile.
     pkill -P "$WATCH_PID" 2>/dev/null || true
     kill "$WATCH_PID" 2>/dev/null || true
     WATCH_PID=""
+}
+
+remove_fifos() {  # remove every manifest path that is a FIFO (clean exit / startup sweep)
+    [ -f "${MANIFEST_FILE:-}" ] || return 0
+    while IFS= read -r p; do
+        [ -n "$p" ] && [ -p "$p" ] && rm -f "$p" && log "removed fifo bait $p"
+    done < "$MANIFEST_FILE"
+    return 0
 }
 
 # reconcile <old-snapshot>: dep_* already hold the NEW set (post re-pull).
@@ -676,6 +743,24 @@ verify_planted() {
             # and never re-plant through it (curl -o would write the target); report
             # failed so the lost coverage is visible.
             report_plant "$vid" failed
+        elif [ "$FIFO_MODE" = 1 ] && [ -e "$p" ] && ! [ -p "$p" ]; then
+            # A regular file where our FIFO should be = tampering/replacement.
+            # Recover like the "missing" branch below: plant() removes the impostor
+            # (our own path) and re-creates the FIFO, then REPLANTED restarts the
+            # watcher to serve it. A bare report-failed would leave the sensor
+            # permanently blind - while a mere *deletion* self-heals, so a
+            # *replacement* must recover too, not be the stronger attack (Roee #123 F1).
+            report_plant "$vid" failed
+            eval "a=\${heal_$vid:-0}"
+            if [ "$a" -lt "$REPLANT_MAX" ]; then
+                if plant "$i"; then
+                    log "recovered tampered FIFO bait $vid"
+                    REPLANTED=1
+                else
+                    eval "heal_$vid=$((a + 1))"
+                    log "FIFO recovery failed for $vid ($((a + 1))/$REPLANT_MAX)"
+                fi
+            fi
         elif [ -e "$p" ]; then
             # Bait is on disk → re-assert planted every cycle. Recovers a deployment
             # whose initial report was lost (e.g. a network blip during report_plant)
@@ -690,6 +775,7 @@ verify_planted() {
             if [ "$a" -lt "$REPLANT_MAX" ]; then
                 if plant "$i"; then
                     log "re-planted missing bait $vid"
+                    REPLANTED=1
                 else
                     eval "heal_$vid=$((a + 1))"
                     log "re-plant failed for $vid ($((a + 1))/$REPLANT_MAX)"
@@ -705,15 +791,21 @@ verify_planted() {
 run() {
     STATE_FILE=${STATE_FILE:-$DEFAULT_STATE}
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
-    # Marker that a watcher stop was deliberate (reconcile/shutdown), so a sensor
-    # exiting then can stay quiet instead of crying "sensor died / falling back".
+    BAITCACHE="$(dirname "$STATE_FILE")/bait"
     WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
+    mkdir -p "$(dirname "$STATE_FILE")"
+    probe_fifo_mode
+    [ "$FIFO_MODE" = 1 ] && log "sensor: FIFO bait (macOS)"
     MAIN_PID=$$   # so the backgrounded heartbeat loop can signal us to self-destruct
     # Enforce one-agent-per-install before any work; a duplicate exits here (the
     # EXIT trap below is NOT yet set, so it can't disturb the live holder's lock).
     acquire_singleton
     trap 'release_singleton; exit 0' INT TERM
     trap 'release_singleton' EXIT
+    # Only the lock holder sweeps stale FIFOs from a prior hard-kill; a duplicate
+    # invocation exits at acquire_singleton above and must never touch the live
+    # agent's shared manifest/FIFOs (MDM re-push safety).
+    [ "$FIFO_MODE" = 1 ] && remove_fifos
     resolve_target_user
 
     # Abort BEFORE enrolling if any bait path is occupied, so a refused install
@@ -734,6 +826,12 @@ run() {
             fire "$i" open simulated "$$" "${USER:-$(id -un)}" ""
             i=$((i + 1))
         done
+        # --simulate exits before the cleanup traps are armed, so clean up now:
+        # sweep any FIFO bait (a leftover no-reader pipe blocks every real open()
+        # forever) AND remove the cached fake-credential content it planted -
+        # test-only mode shouldn't leave either behind (Roee #123 F2).
+        [ "$FIFO_MODE" = 1 ] && remove_fifos
+        [ -n "${BAITCACHE:-}" ] && [ -d "$BAITCACHE" ] && rm -rf "$BAITCACHE"
         return 0
     fi
     [ "$ONCE" = "1" ] && return 0
@@ -749,8 +847,8 @@ run() {
     # release the singleton lock. Combined into one trap (replacing the release-
     # only trap set after acquire_singleton) so none clobbers the others.
     cleanup_heartbeat() { [ -n "$HEARTBEAT_PID" ] && kill "$HEARTBEAT_PID" 2>/dev/null; }
-    trap 'stop_watcher; cleanup_heartbeat; release_singleton; exit 0' INT TERM
-    trap 'stop_watcher; cleanup_heartbeat; release_singleton' EXIT
+    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton; exit 0' INT TERM
+    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton' EXIT
     # Remote kill: the heartbeat loop raises USR1 when the server flags us.
     trap 'self_destruct' USR1
 
@@ -789,7 +887,13 @@ run() {
             reconcile "$_old"
             start_watcher
         fi
+        REPLANTED=0
         verify_planted   # every cycle, even when the set did not change
+        if [ "$FIFO_MODE" = 1 ] && [ "$REPLANTED" = 1 ]; then
+            log "re-planted bait - restarting FIFO watcher to serve it"
+            stop_watcher
+            start_watcher
+        fi
     done
 }
 

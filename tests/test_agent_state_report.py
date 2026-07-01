@@ -2,6 +2,8 @@
 leftover. Drives the real agent against a stub that can fail one content fetch
 and records state reports."""
 import http.server
+import platform
+import stat
 import subprocess
 import threading
 from pathlib import Path
@@ -89,7 +91,10 @@ def test_reports_planted_for_good_and_failed_for_bad(agent):
 
     assert _Stub.states.get("dp_good") == "planted"
     assert _Stub.states.get("dp_bad") == "failed"
-    assert Path(good).read_text() == BAIT, "dp_good file not written despite planted state"
+    if platform.system() == "Darwin":
+        assert stat.S_ISFIFO(Path(good).stat().st_mode), "bait not planted as FIFO"
+    else:
+        assert Path(good).read_text() == BAIT, "bait body not planted"
 
 
 def test_force_curl_failure_leaves_no_leftover(agent):

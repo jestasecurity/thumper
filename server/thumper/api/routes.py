@@ -565,8 +565,9 @@ def serve_agent():
 @agent_router.get("/install.sh", response_class=PlainTextResponse)
 def install_script(tripwire: list[str] = Query(default=[]), token: str = Query(default="")):
     """A self-bootstrapping installer. The tripwire's deploy command pipes this
-    into `sudo sh`: it downloads the Bash agent and starts it watching as root
-    (so fs_usage works). Distribute it via MDM/SSH or paste it on the endpoint.
+    into `sh` (or `sudo sh` when planting in a system path like /etc/ssh): it
+    downloads the Bash agent and starts it watching. Distribute via MDM/SSH or
+    paste it on the endpoint.
 
     The script embeds ENROLL_TOKEN, so it is gated behind INSTALL_TOKEN - only
     the server-generated deploy command (which carries the token) can fetch it.
@@ -597,8 +598,8 @@ fi
 mkdir -p "$DIR"
 curl -fsSL "$SERVER/api/agent/thumper_agent.sh" -o "$DIR/thumper_agent.sh"
 chmod +x "$DIR/thumper_agent.sh"
-# Start watching in the background. Runs as root (for fs_usage); the agent plants
-# bait in the real user's home and chowns it to that user.
+# Start watching in the background. Root is only needed to plant bait in system
+# paths like /etc/ssh; the agent plants in the real user's home and chowns it.
 nohup sh "$DIR/thumper_agent.sh" run \\
   --server "$SERVER" --enroll-token "$ENROLL_TOKEN" {tw_args} \\
   --heartbeat 60 --state-file "$DIR/agent.json" >"$DIR/agent.log" 2>&1 &
