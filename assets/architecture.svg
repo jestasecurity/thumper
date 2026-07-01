@@ -44,7 +44,7 @@
   <g><rect class="lbl-bg" x="300" y="200" width="54" height="17"/><text class="llabel" x="307" y="213">HTTPS</text></g>
   <g><rect class="lbl-bg" x="744" y="176" width="150" height="17"/><text class="llabel" x="751" y="189">enroll · deploy spec</text></g>
   <g><rect class="lbl-bg" x="610" y="342" width="92" height="17"/><text class="llabel" x="617" y="355">alert fan-out</text></g>
-  <g><rect class="lbl-bg" x="660" y="296" width="104" height="17"/><text class="llabel" x="667" y="309" fill="#ff8a8a">signed callback</text></g>
+  <g><rect class="lbl-bg" x="735" y="296" width="104" height="17"/><text class="llabel" x="742" y="309" fill="#ff8a8a">signed callback</text></g>
 
   <!-- UI node -->
   <rect class="node" x="72" y="170" width="186" height="150" rx="11"/>
@@ -74,7 +74,7 @@
   <rect class="node" x="892" y="138" width="216" height="104" rx="12"/>
   <text class="ntitle" x="918" y="172" font-size="14">Endpoint agent</text>
   <text class="nsub" x="918" y="198">pure-Bash · plants bait</text>
-  <text class="nsub" x="918" y="222">watches reads (fs_usage)</text>
+  <text class="nsub" x="918" y="222">watches reads</text>
 
   <!-- planted bait -->
   <rect class="node" x="892" y="280" width="216" height="104" rx="12"/>
