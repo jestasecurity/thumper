@@ -461,19 +461,16 @@ def test_fifo_supervisor_restarts_individual_dead_writers():
 
 def test_atime_stat_order_prefers_portable_access_time():
     # #28: `stat -f %a` on Linux is statfs (free blocks), so the portable
-    # `stat -c %X` must be tried FIRST. Assert BOTH call sites use the right order
-    # so that a future refactor of one cannot silently pass by matching the other.
+    # `stat -c %X` must be tried FIRST. The atime read is now centralized in the
+    # read_atime() helper (one site, not two inline copies); assert that helper
+    # uses the right order and the reversed (wrong) order appears nowhere.
     src = AGENT.read_text()
-    # Site 1: initial atime capture at the top of watch_atime
     assert (
-        'stat -c %X "$p" 2>/dev/null || stat -f %a "$p" 2>/dev/null || echo 0)' in src
-    ), "watch_atime initialisation must try `stat -c %X` before `stat -f %a`"
-    # Site 2: per-poll atime refresh inside the watch loop
-    assert (
-        'stat -c %X "$p" 2>/dev/null || stat -f %a "$p" 2>/dev/null || echo 0' in src
-    ), "watch_atime poll loop must try `stat -c %X` before `stat -f %a`"
+        'stat -c %X "$1" 2>/dev/null || stat -f %a "$1" 2>/dev/null || echo 0' in src
+    ), "read_atime() must try `stat -c %X` before `stat -f %a`"
     # The reversed (wrong) order must not appear anywhere in the source
-    assert 'stat -f %a "$p" 2>/dev/null || stat -c %X' not in src, (
-        "source must not contain the wrong stat order (stat -f %a before stat -c %X)"
-    )
+    for badvar in ('"$1"', '"$p"'):
+        assert (
+            f'stat -f %a {badvar} 2>/dev/null || stat -c %X' not in src
+        ), "source must not contain the wrong stat order (stat -f %a before stat -c %X)"
     assert "watch_fs_usage" not in src, "fs_usage sensor must be removed"
