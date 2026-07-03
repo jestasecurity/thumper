@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { TripwireDetail as TD } from "../api";
 import { api, ApiError } from "../api";
-import { CopyField, DeployBadge, Modal, timeAgo, Topbar, TypeTag } from "../components/ui.tsx";
+import { CopyField, DeployBadge, Modal, TimeAgo, Topbar, TypeTag } from "../components/ui.tsx";
 import { Pencil, Trash2 } from "lucide-react";
 import PageTitle from "../components/PageTitle.tsx";
 
@@ -118,7 +118,7 @@ export default function TripwireDetail() {
             <TypeTag type={tw.token_type} />
             <span className="path">{tw.path}</span>
             <span className="muted">source: {tw.source}</span>
-            <span className="muted">created {timeAgo(tw.created_at)}</span>
+            <span className="muted">created <TimeAgo iso={tw.created_at} /></span>
           </div>
 
           {tw.token && (
@@ -174,9 +174,9 @@ export default function TripwireDetail() {
                       <Link to={`/endpoints/${d.endpoint_id}`}>{d.endpoint_hostname}</Link>
                     </td>
                     <td className="path">{d.id}</td>
-                    <td className="muted">{timeAgo(d.created_at)}</td>
+                    <td className="muted"><TimeAgo iso={d.created_at} /></td>
                     <td className="muted">
-                      {d.last_triggered ? timeAgo(d.last_triggered) : "-"}
+                      {d.last_triggered ? <TimeAgo iso={d.last_triggered} /> : "-"}
                     </td>
                     <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} /></td>
                   </tr>

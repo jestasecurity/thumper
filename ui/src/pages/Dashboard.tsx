@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import type { Alert, DashboardStats, Tripwire } from "../api";
 import { api } from "../api";
-import { AlertBadge, timeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
+import { AlertBadge, TimeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 type AlertFilter = "open" | "all" | "resolved";
@@ -170,7 +170,7 @@ export default function Dashboard() {
               <tbody>
                 {shownAlerts.slice(0, 8).map((a) => (
                   <tr key={a.id}>
-                    <td className="muted">{timeAgo(a.timestamp)}</td>
+                    <td className="muted"><TimeAgo iso={a.timestamp} /></td>
                     <td><AlertBadge status={a.status} /></td>
                     <td>
                       <Link to={`/endpoints/${a.endpoint_id}`}>{a.endpoint_hostname}</Link>

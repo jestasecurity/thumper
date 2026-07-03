@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
 import type { InstallCommand, Tripwire } from "../api";
 import { api } from "../api";
-import { CopyField, Modal, timeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
+import { CopyField, Modal, TimeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 export default function Tripwires() {
@@ -156,7 +156,7 @@ export default function Tripwires() {
                     <td><TypeTag type={t.token_type} /></td>
                     <td className="path">{t.path}</td>
                     <td className="muted">{t.source}</td>
-                    <td className="muted">{timeAgo(t.created_at)}</td>
+                    <td className="muted"><TimeAgo iso={t.created_at} /></td>
                     <td>{t.deployed_count}</td>
                     <td><TripwireBadge deployed={t.deployed_count} triggered={t.triggered_count} /></td>
                     <td className="row-actions" onClick={(e) => e.stopPropagation()}>

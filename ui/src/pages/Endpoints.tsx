@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Endpoint } from "../api";
 import { api } from "../api";
-import { EndpointBadge, timeAgo, Topbar } from "../components/ui.tsx";
+import { EndpointBadge, TimeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 export default function Endpoints() {
@@ -46,8 +46,8 @@ export default function Endpoints() {
                   <tr key={e.id} className="clickable-row" onClick={() => nav(`/endpoints/${e.id}`)}>
                     <td>{e.hostname}</td>
                     <td className="muted">{e.platform ?? "-"}</td>
-                    <td className="muted">{timeAgo(e.enrolled_at)}</td>
-                    <td className="muted">{e.last_seen ? timeAgo(e.last_seen) : "-"}</td>
+                    <td className="muted"><TimeAgo iso={e.enrolled_at} /></td>
+                    <td className="muted">{e.last_seen ? <TimeAgo iso={e.last_seen} /> : "-"}</td>
                     <td>{e.deployment_count}</td>
                     <td className={e.triggered_count > 0 ? "danger-text" : ""}>
                       {e.triggered_count}
