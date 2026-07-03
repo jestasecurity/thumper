@@ -93,24 +93,34 @@ ENROLL_TOKEN = os.environ.get("THUMPER_ENROLL_TOKEN", _DEFAULT_ENROLL_TOKEN)
 _DEFAULT_INSTALL_TOKEN = "dev-install-token"
 INSTALL_TOKEN = os.environ.get("THUMPER_INSTALL_TOKEN", _DEFAULT_INSTALL_TOKEN)
 
-# Admin token gating the whole management/UI API (#20). NO default on purpose:
-# fail closed. When unset, the management API is disabled (503) rather than
-# served open - a dev default would just recreate the no-auth hole. Set
-# THUMPER_ADMIN_TOKEN to a random secret to enable the dashboard/API.
+# Admin token gating the whole management/UI API (#20). NO code default on
+# purpose: fail closed. When unset, the management API is disabled (503) rather
+# than served open. .env.example ships this obvious dev value for local use;
+# it's publicly known, so a prod deploy that copies it is flagged at startup
+# (below) exactly like the enroll/install defaults - but it is never a code
+# default, so an unset token still fails closed.
+_DEFAULT_ADMIN_TOKEN = "dev-admin-token"
 ADMIN_TOKEN = os.environ.get("THUMPER_ADMIN_TOKEN", "")
 
 
-def insecure_default_tokens(enroll: str | None = None, install: str | None = None) -> list[str]:
+def insecure_default_tokens(
+    enroll: str | None = None,
+    install: str | None = None,
+    admin: str | None = None,
+) -> list[str]:
     """Names of the shared tokens still set to their built-in dev defaults.
     Used to warn loudly at startup so a production deploy doesn't silently run
     with publicly-known credentials."""
     enroll = ENROLL_TOKEN if enroll is None else enroll
     install = INSTALL_TOKEN if install is None else install
+    admin = ADMIN_TOKEN if admin is None else admin
     flagged = []
     if enroll == _DEFAULT_ENROLL_TOKEN:
         flagged.append("THUMPER_ENROLL_TOKEN")
     if install == _DEFAULT_INSTALL_TOKEN:
         flagged.append("THUMPER_INSTALL_TOKEN")
+    if admin == _DEFAULT_ADMIN_TOKEN:
+        flagged.append("THUMPER_ADMIN_TOKEN")
     return flagged
 
 # Secret used to encrypt integration config (plugin credentials) at rest (#24).
