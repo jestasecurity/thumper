@@ -133,9 +133,9 @@ export default function TripwireDetail() {
             Run the command below on the machines you choose - paste it on a box, or push it
             via your MDM / SSH / Ansible. It's self-bootstrapping: it downloads the agent,
             self-enrolls, and starts watching. Each machine gets its <strong>own unique</strong>{" "}
-            honeytoken instance + secret. <code>sudo</code> is required so the monitor can see
-            file reads (macOS <code>fs_usage</code>). Your MDM decides which devices are in
-            scope - Thumper doesn't manage groups.
+            honeytoken instance + secret. The agent watches reads with an unprivileged
+            FIFO/inotify sensor and an atime-poll fallback. Your MDM decides which devices are
+            in scope - Thumper doesn't manage groups.
           </p>
           <CopyField value={tw.install.command} />
           <div className="row" style={{ marginTop: 12 }}>

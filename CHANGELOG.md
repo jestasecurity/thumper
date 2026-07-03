@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Removed stale dashboard copy that described the old macOS `fs_usage`/sudo-based tripwire sensor.
+
 ## [0.1.0] - unreleased
 
 Initial release: control-plane server, endpoint agent, dashboard UI, and the plugin system.
