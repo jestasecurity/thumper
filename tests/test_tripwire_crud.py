@@ -20,6 +20,17 @@ def _enroll(tc, machine_id, tripwire_ids):
     assert r.status_code == 200
 
 
+def test_token_types_includes_docker_config(client_db):
+    tc, _ = client_db
+
+    resp = tc.get("/api/token-types")
+
+    assert resp.status_code == 200
+    docker = next(item for item in resp.json() if item["type"] == "docker")
+    assert docker["default_path"] == "~/.docker/config.json"
+    assert "~/.docker/config.json" in docker["suggested_paths"]
+
+
 def test_create_tripwire_strips_name(client_db):
     tc, db = client_db
 
