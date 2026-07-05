@@ -50,6 +50,18 @@ TOKEN_TYPES = [
                        "malicious packages.",
     },
     {
+        "type": "docker",
+        "display_name": "Docker registry auth",
+        "default_path": "~/.docker/config.json",
+        "suggested_paths": [
+            "~/.docker/config.json",
+            "~/.dockercfg",
+            "~/project/.docker/config.json",
+        ],
+        "description": "Fake Docker registry auth config. Supply-chain attackers "
+                       "scan this file for registry credentials they can exfiltrate.",
+    },
+    {
         "type": "gcp",
         "display_name": "GCP service account",
         "default_path": "~/.config/gcloud/application_default_credentials.json",

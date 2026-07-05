@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Docker registry credentials honeytoken type for `~/.docker/config.json`.
 - Added absolute local-time tooltips to relative timestamps in the dashboard UI.
 
 ### Changed
