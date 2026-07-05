@@ -87,7 +87,7 @@ export interface EndpointDetail extends Endpoint {
   deployments: Deployment[];
 }
 
-/** A fired tripwire - enriched by the endpoint monitor (fs_usage). */
+/** A fired tripwire - enriched by the endpoint monitor. */
 export interface Alert {
   id: string;
   deployment_id: string;

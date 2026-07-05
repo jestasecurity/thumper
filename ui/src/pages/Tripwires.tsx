@@ -117,8 +117,8 @@ export default function Tripwires() {
               </div>
               <p className="muted" style={{ marginTop: 0 }}>
                 Run it on the machines you choose - paste it on a box, or push it via your MDM /
-                SSH. One agent self-enrolls and plants + watches all selected tripwires.{" "}
-                <code>sudo</code> is required (macOS <code>fs_usage</code>).
+                SSH. One agent self-enrolls and plants + watches all selected tripwires with an
+                unprivileged FIFO/inotify watcher and an atime-poll fallback.
               </p>
               <CopyField value={install.command} />
             </div>
