@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import type { Alert, DashboardStats, Tripwire } from "../api";
 import { api } from "../api";
-import { AlertBadge, timeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
+import { AlertBadge, TimeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 type AlertFilter = "open" | "all" | "resolved";
@@ -17,8 +17,12 @@ export default function Dashboard() {
   const [spinning, setSpinning] = useState(false);
   const [flash, setFlash] = useState(false);
   const [filter, setFilter] = useState<AlertFilter>("open");
+  const [resolvingAll, setResolvingAll] = useState(false);
+  const [resolvingIds, setResolvingIds] = useState<Set<string>>(() => new Set());
   const nav = useNavigate();
   const countdownRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const resolvingAllRef = useRef(false);
+  const resolvingIdsRef = useRef<Set<string>>(new Set());
   const PAGE_TITLE = "Dashboard";
 
   const reload = useCallback(() => {
@@ -69,13 +73,32 @@ export default function Dashboard() {
 
   const openAlerts = alerts.filter((a) => a.status === "open");
   const shownAlerts = (filter === "all" ? alerts : alerts.filter((a) => a.status === filter));
+  const resolvingAny = resolvingAll || resolvingIds.size > 0;
 
   function resolveOne(id: string) {
-    api.resolveAlert(id).then(reload);
+    if (resolvingAllRef.current || resolvingIdsRef.current.has(id)) return;
+    resolvingIdsRef.current = new Set(resolvingIdsRef.current).add(id);
+    setResolvingIds(resolvingIdsRef.current);
+    api.resolveAlert(id)
+      .then(reload)
+      .finally(() => {
+        const next = new Set(resolvingIdsRef.current);
+        next.delete(id);
+        resolvingIdsRef.current = next;
+        setResolvingIds(next);
+      });
   }
 
   function resolveAllOpen() {
-    api.resolveAllAlerts().then(reload);
+    if (resolvingAllRef.current) return;
+    resolvingAllRef.current = true;
+    setResolvingAll(true);
+    api.resolveAllAlerts()
+      .then(reload)
+      .finally(() => {
+        resolvingAllRef.current = false;
+        setResolvingAll(false);
+      });
   }
 
   return (
@@ -141,8 +164,8 @@ export default function Dashboard() {
                 ))}
               </span>
               {openAlerts.length > 0 && (
-                <button className="btn small" onClick={resolveAllOpen}>
-                  Resolve all
+                <button className="btn small" onClick={resolveAllOpen} disabled={resolvingAny}>
+                  {resolvingAll ? "Resolving…" : "Resolve all"}
                 </button>
               )}
             </span>
@@ -170,7 +193,7 @@ export default function Dashboard() {
               <tbody>
                 {shownAlerts.slice(0, 8).map((a) => (
                   <tr key={a.id}>
-                    <td className="muted">{timeAgo(a.timestamp)}</td>
+                    <td className="muted"><TimeAgo iso={a.timestamp} /></td>
                     <td><AlertBadge status={a.status} /></td>
                     <td>
                       <Link to={`/endpoints/${a.endpoint_id}`}>{a.endpoint_hostname}</Link>
@@ -187,8 +210,12 @@ export default function Dashboard() {
                     <td className="path">{a.accessed_path ?? "-"}</td>
                     <td style={{ textAlign: "right" }}>
                       {a.status === "open" && (
-                        <button className="btn small" onClick={() => resolveOne(a.id)}>
-                          Resolve
+                        <button
+                          className="btn small"
+                          onClick={() => resolveOne(a.id)}
+                          disabled={resolvingAll || resolvingIds.has(a.id)}
+                        >
+                          {resolvingIds.has(a.id) ? "Resolving…" : "Resolve"}
                         </button>
                       )}
                     </td>

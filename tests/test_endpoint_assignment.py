@@ -98,3 +98,24 @@ def test_reenroll_is_additive(client_db):
     _enroll(tc, "m1", a.id)
     db.expire_all()
     assert {d.tripwire_id for d in store.list_deployments_for_endpoint(db, eid)} == {a.id, b.id}
+
+
+# ── GET /api/endpoints/{eid} (#200) ──────────────────────────────────────────
+
+def test_get_endpoint_includes_deployments(client_db):
+    tc, db = client_db
+    a = _mk(db, "aws")
+    eid = _enroll(tc, "m1", a.id)
+
+    resp = tc.get(f"/api/endpoints/{eid}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == eid
+    assert len(body["deployments"]) == 1
+    assert body["deployments"][0]["tripwire_id"] == a.id
+
+
+def test_get_endpoint_unknown_404(client_db):
+    tc, _ = client_db
+    assert tc.get("/api/endpoints/ep_nope").status_code == 404

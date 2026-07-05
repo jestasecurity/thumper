@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Integration, IntegrationTestResult, PluginManifest } from "../api";
 import { api } from "../api";
-import { timeAgo, Topbar } from "../components/ui.tsx";
+import { TimeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 export default function Integrations() {
@@ -58,7 +58,7 @@ export default function Integrations() {
         </span>
       );
     }
-    const when = st.last_test_at ? ` · ${timeAgo(st.last_test_at)}` : "";
+    const when = st.last_test_at ? <> · <TimeAgo iso={st.last_test_at} /></> : null;
     if (st.last_test_status === "ok") {
       return (
         <span className="badge deployed">
