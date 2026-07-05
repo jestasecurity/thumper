@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Integration, IntegrationTestResult, PluginManifest } from "../api";
 import { api } from "../api";
-import { TimeAgo, Topbar } from "../components/ui.tsx";
+import { Modal, TimeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 export default function Integrations() {
@@ -256,12 +256,7 @@ function ConfigModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="card modal-card"
-        style={{ width: 480 }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} style={{ width: 480 }}>
         <div className="card-head">
           <h2>Configure {manifest.display_name}</h2>
           <span className="type-tag">{manifest.kind}</span>
@@ -333,7 +328,6 @@ function ConfigModal({
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

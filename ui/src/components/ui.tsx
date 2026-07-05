@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { AlertStatus, DeploymentState, EndpointStatus } from "../api";
 
 export function Topbar({ title, action }: { title: string; action?: ReactNode }) {
@@ -133,10 +133,49 @@ export function CopyField({ value }: { value: string }) {
   );
 }
 
-export function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "a[href]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+export function Modal({
+  children,
+  onClose,
+  style,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  style?: CSSProperties;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    const target = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ?? dialogRef.current;
+    target?.focus();
+
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="card modal-card" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="card modal-card"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        style={style}
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>

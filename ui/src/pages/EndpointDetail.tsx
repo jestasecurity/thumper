@@ -3,18 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import type { EndpointDetail as ED, Tripwire } from "../api";
 import { api, ApiError } from "../api";
-import { DeployBadge, EndpointBadge, TimeAgo, Topbar } from "../components/ui.tsx";
+import { DeployBadge, EndpointBadge, Modal, TimeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
-
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="card modal-card" onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export default function EndpointDetail() {
   const { id = "" } = useParams();
