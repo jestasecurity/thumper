@@ -648,6 +648,14 @@ watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any th
             # until the next full re-plant restart. And we must NOT fall back to
             # atime: atime polling on a writerless pipe is silently blind.
             if [ -p "$_sf" ] && ! kill -0 "$_sp" 2>/dev/null; then
+                # A deliberate stop sets WATCH_STOP_FLAG *before* it pkill's the
+                # writers, so re-check it here: a writer that just died because
+                # we're shutting down must NOT be respawned. Without this guard a
+                # respawn in stop_watcher's pkill->kill window leaks a serve_fifo
+                # blocked in open(O_WRONLY) (no reader); that orphan keeps the
+                # agent's stdout/stderr open, so on SIGTERM the process never
+                # reaches EOF and shutdown intermittently hangs.
+                [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
                 serve_fifo "$i" & eval "sf_pid_$i=\$!"
                 log "restarted dead FIFO writer for bait $i"
             fi

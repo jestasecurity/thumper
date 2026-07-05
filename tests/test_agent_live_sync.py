@@ -7,6 +7,7 @@ runs independently of the watcher, so the test is deterministic regardless of
 whether fs_usage is usable in CI.
 """
 import http.server
+import os
 import signal
 import subprocess
 import threading
@@ -20,12 +21,28 @@ BAIT_BODY = "BAIT-honeytoken-content"
 REAL_SECRET = "REAL-SECRET-DO-NOT-DELETE"
 
 
-# Teardown wait for the agent process to exit after SIGTERM. The exit trap
-# (stop_watcher -> pkill children, remove_fifos, cleanup_heartbeat, release
-# the singleton lock) spawns several helper subprocesses (ps/pkill/lsof);
-# on a loaded macOS CI runner that teardown can exceed a tight 5s and flake
-# the test (e.g. test_heartbeat_success_is_logged), so allow generous headroom.
+# Belt-and-suspenders teardown wait. The real shutdown fix is agent-side (the
+# FIFO supervisor no longer respawns a writer once a stop is signalled) plus
+# signalling the whole process group below; this generous timeout only guards
+# against unrelated slow-runner jitter so a legitimate exit is never cut short.
 AGENT_EXIT_TIMEOUT = 30
+
+
+def _term_group(p):
+    """SIGTERM the agent's whole process group, so no orphaned watcher/writer
+    child can survive to hold the stdout/stderr pipe open (which would hang a
+    communicate()). Safe because start() spawns each agent in its own session."""
+    try:
+        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        p.send_signal(signal.SIGTERM)
+
+
+def _kill_group(p):
+    try:
+        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        p.send_signal(signal.SIGKILL)
 
 class _StubHandler(http.server.BaseHTTPRequestHandler):
     deployments = []         # current set: [{"id","path"}]
@@ -108,7 +125,8 @@ def agent(tmp_path):
             ["sh", str(AGENT), "run", "--server", base,
              "--enroll-token", "dev-enroll-token", "--tripwire", "tw_test",
              "--state-file", str(state), *flags],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            start_new_session=True)  # own process group -> teardown can kill the whole tree
         procs.append(p)
         return p
 
@@ -121,11 +139,11 @@ def agent(tmp_path):
                "keep": keep, "drop": drop, "add": add}
     finally:
         for p in procs:
-            p.send_signal(signal.SIGTERM)
+            _term_group(p)
             try:
                 p.wait(timeout=AGENT_EXIT_TIMEOUT)
             except subprocess.TimeoutExpired:
-                p.send_signal(signal.SIGKILL)
+                _kill_group(p)
         httpd.shutdown()
 
 
@@ -251,7 +269,11 @@ def test_heartbeat_success_is_logged(agent):
     before = _StubHandler.heartbeats_ok
     assert _wait_until(lambda: _StubHandler.heartbeats_ok > before), "no heartbeat sent"
 
-    proc.send_signal(signal.SIGTERM)
+    # SIGTERM the whole group (not just the main pid): communicate() blocks
+    # until stdout/stderr reach EOF, so any watcher/writer child still holding
+    # the pipe would hang it. The agent-side fix stops the leak at the source;
+    # this makes the assertion robust even if a child lingers.
+    _term_group(proc)
     stdout, stderr = proc.communicate(timeout=AGENT_EXIT_TIMEOUT)
     assert "heartbeat succeeded" in stdout + stderr
 
