@@ -20,6 +20,13 @@ BAIT_BODY = "BAIT-honeytoken-content"
 REAL_SECRET = "REAL-SECRET-DO-NOT-DELETE"
 
 
+# Teardown wait for the agent process to exit after SIGTERM. The exit trap
+# (stop_watcher -> pkill children, remove_fifos, cleanup_heartbeat, release
+# the singleton lock) spawns several helper subprocesses (ps/pkill/lsof);
+# on a loaded macOS CI runner that teardown can exceed a tight 5s and flake
+# the test (e.g. test_heartbeat_success_is_logged), so allow generous headroom.
+AGENT_EXIT_TIMEOUT = 30
+
 class _StubHandler(http.server.BaseHTTPRequestHandler):
     deployments = []         # current set: [{"id","path"}]
     seen = []
@@ -116,7 +123,7 @@ def agent(tmp_path):
         for p in procs:
             p.send_signal(signal.SIGTERM)
             try:
-                p.wait(timeout=5)
+                p.wait(timeout=AGENT_EXIT_TIMEOUT)
             except subprocess.TimeoutExpired:
                 p.send_signal(signal.SIGKILL)
         httpd.shutdown()
@@ -245,7 +252,7 @@ def test_heartbeat_success_is_logged(agent):
     assert _wait_until(lambda: _StubHandler.heartbeats_ok > before), "no heartbeat sent"
 
     proc.send_signal(signal.SIGTERM)
-    stdout, stderr = proc.communicate(timeout=5)
+    stdout, stderr = proc.communicate(timeout=AGENT_EXIT_TIMEOUT)
     assert "heartbeat succeeded" in stdout + stderr
 
 
