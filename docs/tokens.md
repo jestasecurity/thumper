@@ -107,3 +107,4 @@ pytest -v
 - [ ] `generator.py` — matching `if token_type == "..."` branch added
 - [ ] `tests/test_tripwire_content.py` — new test added
 - [ ] `pytest -v` passes
+- [ ] `CHANGELOG.md` — bump the "N built-in types" count and add the new type to the list
