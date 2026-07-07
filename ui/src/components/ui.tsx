@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AlertStatus, DeploymentState, EndpointStatus } from "../api";
 
@@ -134,9 +134,42 @@ export function CopyField({ value }: { value: string }) {
 }
 
 export function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    cardRef.current?.focus({ preventScroll: true });
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onCloseRef.current();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previousFocus instanceof HTMLElement) {
+        previousFocus.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="card modal-card" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={cardRef}
+        className="card modal-card"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>
