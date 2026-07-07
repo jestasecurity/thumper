@@ -26,7 +26,7 @@ Initial release: control-plane server, endpoint agent, dashboard UI, and the plu
 - **Server**: FastAPI control plane with SQLite/Postgres/MySQL support via SQLAlchemy + Alembic, and signed tripwire-trigger callbacks with replay protection.
 - **Agent**: standalone Bash endpoint agent (`agent/thumper_agent.sh`, curl + openssl only, no Python dependency) that plants honeytoken files and reports reads back to the server.
 - **UI**: React/Vite dashboard for creating tripwires, managing the enrolled endpoint fleet, and viewing the live alert feed.
-- **Honeytoken types**: six built-in types — `aws`, `github`, `npm`, `gcp`, `azure`, `ssh`. Each generated with a realistic-but-non-functional credential shape.
+- **Honeytoken types**: seven built-in types — `aws`, `github`, `npm`, `docker`, `gcp`, `azure`, `ssh`. Each generated with a realistic-but-non-functional credential shape.
 - **Alert plugins**: generic webhook, Splunk (HEC), Loki.
 - **Deploy plugins**: SSH (direct) and MDM (Jamf Pro).
 - **Deployment**: single Docker image (`docker compose up --build`) and a Helm chart for Kubernetes (`deploy/helm/thumper`).
