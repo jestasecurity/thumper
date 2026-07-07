@@ -37,6 +37,19 @@ TOKEN_TYPES = [
                        "exfiltrates these to self-replicate via the API.",
     },
     {
+        "type": "gitlab",
+        "display_name": "GitLab PAT",
+        "default_path": "~/.config/glab-cli/config.yml",
+        "suggested_paths": [
+            "~/.config/glab-cli/config.yml",
+            "~/.python-gitlab.cfg",
+            "~/.git-credentials",
+            "~/.env",
+        ],
+        "description": "Fake GitLab personal access token. CI/dev workstations often "
+                       "store these for repository and pipeline automation.",
+    },
+    {
         "type": "npm",
         "display_name": "npm token",
         "default_path": "~/.npmrc",
