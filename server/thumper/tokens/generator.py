@@ -52,6 +52,13 @@ def generate_token(token_type: str) -> str:
             "  user: ci-deploy-bot\n"
         )
 
+    if token_type == "gitlab":
+        return (
+            "gitlab.com:\n"
+            f"  token: glpat-{rand_alnum(20)}\n"
+            "  user: ci-deploy-bot\n"
+        )
+
     if token_type == "npm":
         return f"//registry.npmjs.org/:_authToken=npm_{rand_alnum(36)}\n"
 

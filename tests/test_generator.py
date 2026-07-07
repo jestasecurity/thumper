@@ -51,6 +51,14 @@ def test_generate_github_token_has_oauth_file_shape():
     assert "user: ci-deploy-bot" in token
 
 
+def test_generate_gitlab_token_has_pat_file_shape():
+    token = generate_token("gitlab")
+
+    assert "gitlab.com:" in token
+    assert "token: glpat-" in token
+    assert "user: ci-deploy-bot" in token
+
+
 def test_generate_npm_token_has_npmrc_shape():
     token = generate_token("npm")
 
