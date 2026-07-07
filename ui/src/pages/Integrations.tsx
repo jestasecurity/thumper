@@ -257,77 +257,77 @@ function ConfigModal({
 
   return (
     <Modal onClose={onClose} style={{ width: 480 }}>
-        <div className="card-head">
-          <h2>Configure {manifest.display_name}</h2>
-          <span className="type-tag">{manifest.kind}</span>
-        </div>
-        <p className="modal-intro">{manifest.description}</p>
-        {manifest.config_schema.map((f) => {
-          const secretKept = f.type === "secret" && Boolean(current?.config?.[f.key]);
-          return (
-            <div className="field" key={f.key}>
-              <label>
-                <span>{f.label}</span>
-                <span className={`field-tag ${f.required ? "required" : "optional"}`}>
-                  {f.required ? "Required" : "Optional"}
-                </span>
-              </label>
-              <input
-                type={f.type === "secret" && !revealed[f.key] ? "password" : "text"}
-                placeholder={secretKept ? "•••••• - leave blank to keep current" : f.placeholder}
-                value={values[f.key] ?? ""}
-                onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
-              />
-              {f.generate && (
-                <div className="row field-actions">
-                  <button type="button" className="btn small" onClick={() => generateSecret(f.key)}>
-                    Generate
-                  </button>
+      <div className="card-head">
+        <h2>Configure {manifest.display_name}</h2>
+        <span className="type-tag">{manifest.kind}</span>
+      </div>
+      <p className="modal-intro">{manifest.description}</p>
+      {manifest.config_schema.map((f) => {
+        const secretKept = f.type === "secret" && Boolean(current?.config?.[f.key]);
+        return (
+          <div className="field" key={f.key}>
+            <label>
+              <span>{f.label}</span>
+              <span className={`field-tag ${f.required ? "required" : "optional"}`}>
+                {f.required ? "Required" : "Optional"}
+              </span>
+            </label>
+            <input
+              type={f.type === "secret" && !revealed[f.key] ? "password" : "text"}
+              placeholder={secretKept ? "•••••• - leave blank to keep current" : f.placeholder}
+              value={values[f.key] ?? ""}
+              onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+            />
+            {f.generate && (
+              <div className="row field-actions">
+                <button type="button" className="btn small" onClick={() => generateSecret(f.key)}>
+                  Generate
+                </button>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={!values[f.key]}
+                  onClick={() => copyKey(f.key)}
+                >
+                  {copied === f.key ? "Copied ✓" : "Copy"}
+                </button>
+                {f.type === "secret" && values[f.key] && (
                   <button
                     type="button"
                     className="btn small"
-                    disabled={!values[f.key]}
-                    onClick={() => copyKey(f.key)}
+                    onClick={() => setRevealed((r) => ({ ...r, [f.key]: !r[f.key] }))}
                   >
-                    {copied === f.key ? "Copied ✓" : "Copy"}
+                    {revealed[f.key] ? "Hide" : "Show"}
                   </button>
-                  {f.type === "secret" && values[f.key] && (
-                    <button
-                      type="button"
-                      className="btn small"
-                      onClick={() => setRevealed((r) => ({ ...r, [f.key]: !r[f.key] }))}
-                    >
-                      {revealed[f.key] ? "Hide" : "Show"}
-                    </button>
-                  )}
-                </div>
-              )}
-              {f.help && <div className="help">{f.help}</div>}
-            </div>
-          );
-        })}
-        {manifest.kind === "alert" && (
-          <div className="field">
-            <label>
-              <span>Example alert</span>
-              <span className="field-tag optional">JSON</span>
-            </label>
-            <pre className="code-block">{JSON.stringify(SAMPLE_ALERT, null, 2)}</pre>
-            <div className="help">
-              The event every alert integration receives when a tripwire fires - the
-              webhook delivers exactly this as the POST body (HMAC-signed when a
-              signing secret is set).
-            </div>
+                )}
+              </div>
+            )}
+            {f.help && <div className="help">{f.help}</div>}
           </div>
-        )}
-        <div className="row" style={{ marginTop: 6 }}>
-          <button className="btn primary" disabled={saving || missingRequired} onClick={save}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button className="btn" onClick={onClose}>
-            Cancel
-          </button>
+        );
+      })}
+      {manifest.kind === "alert" && (
+        <div className="field">
+          <label>
+            <span>Example alert</span>
+            <span className="field-tag optional">JSON</span>
+          </label>
+          <pre className="code-block">{JSON.stringify(SAMPLE_ALERT, null, 2)}</pre>
+          <div className="help">
+            The event every alert integration receives when a tripwire fires - the
+            webhook delivers exactly this as the POST body (HMAC-signed when a
+            signing secret is set).
+          </div>
         </div>
+      )}
+      <div className="row" style={{ marginTop: 6 }}>
+        <button className="btn primary" disabled={saving || missingRequired} onClick={save}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button className="btn" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
     </Modal>
   );
 }
