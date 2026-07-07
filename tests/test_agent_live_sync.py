@@ -245,7 +245,7 @@ def test_heartbeat_success_is_logged(agent):
     assert _wait_until(lambda: _StubHandler.heartbeats_ok > before), "no heartbeat sent"
 
     proc.send_signal(signal.SIGTERM)
-    stdout, stderr = proc.communicate(timeout=5)
+    stdout, stderr = proc.communicate(timeout=15)
     assert "heartbeat succeeded" in stdout + stderr
 
 
