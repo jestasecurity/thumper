@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import type { EndpointDetail as ED, Tripwire } from "../api";
 import { api, ApiError } from "../api";
-import { DeployBadge, EndpointBadge, TimeAgo, Topbar } from "../components/ui.tsx";
+import { DeployBadge, EndpointBadge, PlatformBadge, TimeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -119,7 +119,7 @@ export default function EndpointDetail() {
         <div className="card">
           <div className="row" style={{ gap: 10 }}>
             <EndpointBadge status={ep.status} />
-            <span className="muted">{ep.platform ?? "unknown platform"}</span>
+            <PlatformBadge platform={ep.platform} />
             <span className="muted">enrolled <TimeAgo iso={ep.enrolled_at} /></span>
             <span className="muted">last seen {ep.last_seen ? <TimeAgo iso={ep.last_seen} /> : "-"}</span>
           </div>

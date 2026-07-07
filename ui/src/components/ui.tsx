@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { Monitor } from "lucide-react";
 import type { AlertStatus, DeploymentState, EndpointStatus } from "../api";
 
 export function Topbar({ title, action }: { title: string; action?: ReactNode }) {
@@ -81,6 +82,24 @@ export function EndpointBadge({ status }: { status: EndpointStatus }) {
   return (
     <span className={`badge ${cls}`}>
       <span className="dot" /> {status}
+    </span>
+  );
+}
+
+function platformLabel(platform: string | null): string {
+  if (!platform) return "unknown";
+  const normalized = platform.toLowerCase();
+  if (normalized === "darwin") return "macOS";
+  if (normalized === "win32" || normalized === "windows") return "Windows";
+  if (normalized === "linux") return "Linux";
+  return platform;
+}
+
+export function PlatformBadge({ platform }: { platform: string | null }) {
+  return (
+    <span className="platform-badge" title={platform ?? "unknown platform"}>
+      <Monitor size={13} aria-hidden="true" />
+      {platformLabel(platform)}
     </span>
   );
 }
