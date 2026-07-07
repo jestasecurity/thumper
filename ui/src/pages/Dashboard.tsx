@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import type { Alert, DashboardStats, Tripwire } from "../api";
 import { api } from "../api";
-import { AlertBadge, TimeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
+import { AlertBadge, Modal, TimeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 type AlertFilter = "open" | "all" | "resolved";
@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [spinning, setSpinning] = useState(false);
   const [flash, setFlash] = useState(false);
   const [filter, setFilter] = useState<AlertFilter>("open");
+  const [confirmResolveAll, setConfirmResolveAll] = useState(false);
   const [resolvingAll, setResolvingAll] = useState(false);
   const [resolvingIds, setResolvingIds] = useState<Set<string>>(() => new Set());
   const nav = useNavigate();
@@ -91,6 +92,7 @@ export default function Dashboard() {
 
   function resolveAllOpen() {
     if (resolvingAllRef.current) return;
+    setConfirmResolveAll(false);
     resolvingAllRef.current = true;
     setResolvingAll(true);
     api.resolveAllAlerts()
@@ -164,7 +166,7 @@ export default function Dashboard() {
                 ))}
               </span>
               {openAlerts.length > 0 && (
-                <button className="btn small" onClick={resolveAllOpen} disabled={resolvingAny}>
+                <button className="btn small" onClick={() => setConfirmResolveAll(true)} disabled={resolvingAny}>
                   {resolvingAll ? "Resolving…" : "Resolve all"}
                 </button>
               )}
@@ -261,6 +263,23 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {confirmResolveAll && (
+        <Modal onClose={() => setConfirmResolveAll(false)}>
+          <div className="card-head"><h2>Resolve all alerts</h2></div>
+          <p className="modal-intro">
+            This will resolve <strong>{openAlerts.length}</strong> open alert
+            {openAlerts.length === 1 ? "" : "s"}. This does not remove the underlying
+            tripwires or endpoint history.
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn primary" onClick={resolveAllOpen} disabled={resolvingAll}>
+              {resolvingAll ? "Resolving…" : "Resolve all"}
+            </button>
+            <button className="btn" onClick={() => setConfirmResolveAll(false)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
