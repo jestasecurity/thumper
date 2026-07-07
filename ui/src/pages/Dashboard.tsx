@@ -8,11 +8,32 @@ import PageTitle from "../components/PageTitle.tsx";
 
 type AlertFilter = "open" | "all" | "resolved";
 
+const REFRESH_INTERVAL_STORAGE_KEY = "thumper.dashboard.refreshInterval";
+const REFRESH_INTERVAL_OPTIONS = [
+  { value: 0, label: "Off" },
+  { value: 15, label: "15s" },
+  { value: 30, label: "30s" },
+  { value: 60, label: "60s" },
+  { value: 300, label: "5m" },
+];
+
+function readStoredRefreshInterval(): number | null {
+  try {
+    const raw = window.localStorage.getItem(REFRESH_INTERVAL_STORAGE_KEY);
+    if (raw === null) return null;
+    const value = Number(raw);
+    return REFRESH_INTERVAL_OPTIONS.some((option) => option.value === value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [tripwires, setTripwires] = useState<Tripwire[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [refreshInterval, setRefreshInterval] = useState(60);
+  const storedRefreshIntervalRef = useRef<number | null>(readStoredRefreshInterval());
+  const [refreshInterval, setRefreshInterval] = useState(() => storedRefreshIntervalRef.current ?? 60);
   const [countdown, setCountdown] = useState(60);
   const [spinning, setSpinning] = useState(false);
   const [flash, setFlash] = useState(false);
@@ -23,6 +44,8 @@ export default function Dashboard() {
   const countdownRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const resolvingAllRef = useRef(false);
   const resolvingIdsRef = useRef<Set<string>>(new Set());
+  const hasStoredRefreshIntervalRef = useRef(storedRefreshIntervalRef.current !== null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const PAGE_TITLE = "Dashboard";
 
   const reload = useCallback(() => {
@@ -41,19 +64,32 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.getSettings().then((s) => {
-      const interval = s.dashboard.refresh_seconds;
+      const interval = hasStoredRefreshIntervalRef.current
+        ? storedRefreshIntervalRef.current ?? refreshInterval
+        : s.dashboard.refresh_seconds;
       setRefreshInterval(interval);
       setCountdown(interval);
+      setSettingsLoaded(true);
     });
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    try {
+      window.localStorage.setItem(REFRESH_INTERVAL_STORAGE_KEY, String(refreshInterval));
+      hasStoredRefreshIntervalRef.current = true;
+    } catch {
+      // Persistence is best-effort; blocked storage should not break the dashboard.
+    }
+  }, [refreshInterval, settingsLoaded]);
+
   const tickRef = useRef(refreshInterval);
 
   useEffect(() => {
-    if (refreshInterval <= 0) return;
     tickRef.current = refreshInterval;
     setCountdown(refreshInterval);
+    if (refreshInterval <= 0) return;
     countdownRef.current = setInterval(() => {
       tickRef.current -= 1;
       if (tickRef.current <= 0) {
@@ -111,6 +147,18 @@ export default function Dashboard() {
             {refreshInterval > 0 && (
               <span className="countdown-badge">{countdown}s</span>
             )}
+            <select
+              className="select-compact"
+              aria-label="Auto-refresh interval"
+              value={refreshInterval}
+              onChange={(e) => setRefreshInterval(Number(e.target.value))}
+            >
+              {REFRESH_INTERVAL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={manualRefresh}>
               <RefreshCw size={15} className={spinning ? "spin" : ""} />
             </button>
