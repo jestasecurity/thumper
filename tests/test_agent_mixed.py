@@ -144,6 +144,11 @@ def test_mixed_sensors_plant_and_fire_together(server, tmp_path):
         ), "atime-sensor bait was not planted as an armed regular file"
         # read the FIFO bait (blocks until the agent serves it) -> fires with pid
         threading.Thread(target=lambda: open(fifo).read(), daemon=True).start()
+        # Let the atime baseline settle before bumping it: watch_mixed's atime_poll
+        # arms then reads the baseline, and the armed gate above trips on the arm, so
+        # a read landing in that window is captured as the baseline and missed. A real
+        # reader hits a steady-state agent, not this startup window (macOS flake).
+        time.sleep(2)
         # 'read' the atime bait -> fires (detection)
         os.utime(atin, (time.time(), os.stat(atin).st_mtime))
         assert _wait(lambda: _fired("/cb/dep_fifo")), "FIFO bait did not fire"
