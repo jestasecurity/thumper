@@ -720,25 +720,49 @@ watch_mixed() {
     _atidx=""; i=1
     while [ "$i" -le "$DEP_COUNT" ]; do
         if [ "$(effective_sensor "$i")" = fifo ]; then
-            serve_fifo "$i" &
+            serve_fifo "$i" & eval "sf_pid_$i=\$!"
         else
             _atidx="$_atidx $i"                         # atime/inotify/unknown -> atime poll (detection)
         fi
         i=$((i + 1))
     done
     [ -n "$_atidx" ] && atime_poll "$_atidx" &
-    wait
-    [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
-    err "mixed watcher exited unexpectedly - degrading to atime poll"
-    atime_poll "$(all_indices)"
+    # Supervise the FIFO writers, exactly like watch_fifo: a serve_fifo that dies
+    # leaves its pipe on disk, so any reader's open() blocks forever and that bait
+    # is silently blind until a full restart (Roee #160 N1). Re-check the stop flag
+    # before every (re)spawn so a deliberate teardown can't leak a writer that
+    # would hold the agent's stdout/stderr open on shutdown.
+    while :; do
+        [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+        i=1
+        while [ "$i" -le "$DEP_COUNT" ]; do
+            if [ "$(effective_sensor "$i")" = fifo ]; then
+                eval "_sp=\$sf_pid_$i _sf=\$dep_path_$i"
+                if [ -p "$_sf" ] && ! kill -0 "$_sp" 2>/dev/null; then
+                    [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+                    serve_fifo "$i" & eval "sf_pid_$i=\$!"
+                    log "restarted dead FIFO writer for bait $i"
+                fi
+            fi
+            i=$((i + 1))
+        done
+        sleep 1
+    done
 }
 
 start_watcher() {  # launch the right sensor in the background; set WATCH_PID
     rm -f "${WATCH_STOP_FLAG:-}" 2>/dev/null || true   # this start is not a stop
-    if has_explicit_sensors; then
-        watch_mixed &                                   # per-deployment sensors (dual-plant pairs)
+    # An explicit operator --sensor wins over server-sent per-deployment sensors:
+    # effective_sensor already plants EVERY bait per the override, so route to the
+    # matching single-sensor watcher. Checking --sensor before has_explicit_sensors
+    # keeps a forced-FIFO run under the SUPERVISED watch_fifo instead of the mixed
+    # watcher (Roee #160 N2, the trigger for N1).
+    if [ "$SENSOR" = fifo ]; then
+        watch_fifo &                                    # operator forced FIFO (supervised)
     elif [ "$SENSOR" = atime ]; then
-        watch_atime &                                   # forced atime sensor (any platform)
+        watch_atime &                                   # operator forced atime (any platform)
+    elif has_explicit_sensors; then
+        watch_mixed &                                   # per-deployment sensors (dual-plant pairs)
     elif [ "$FIFO_MODE" = 1 ]; then
         watch_fifo &
     elif [ "$(platform)" = "linux" ] && command -v inotifywait >/dev/null 2>&1; then
@@ -855,6 +879,15 @@ verify_planted() {
             if [ "$a" -lt "$REPLANT_MAX" ]; then
                 if plant "$i"; then
                     log "re-planted missing bait $vid"
+                    # The OLD atime watcher is still polling with a year-2000
+                    # baseline until REPLANTED restarts it below; the freshly
+                    # fetched file's atime is "now", which it would read as a jump
+                    # and fire a ghost alert with no real read. Arm the new bait to
+                    # year-2000 so it sees baseline == atime and stays quiet (Roee
+                    # #160 F2). Only atime baits are affected; done here (re-plant
+                    # only) not in plant(), so the initial-plant baseline capture is
+                    # untouched.
+                    [ "$(effective_sensor "$i")" = atime ] && arm_atime "$p"
                     REPLANTED=1
                 else
                     eval "heal_$vid=$((a + 1))"
@@ -918,8 +951,10 @@ run() {
         # --simulate exits before the cleanup traps are armed, so clean up now:
         # sweep any FIFO bait (a leftover no-reader pipe blocks every real open()
         # forever) AND remove the cached fake-credential content it planted -
-        # test-only mode shouldn't leave either behind (Roee #123 F2).
-        [ "$FIFO_MODE" = 1 ] && remove_fifos
+        # test-only mode shouldn't leave either behind (Roee #123 F2). Sweep
+        # unconditionally: a per-deployment sensor can plant FIFOs even when the
+        # global FIFO_MODE is 0 (Linux with dep_sensor=fifo) (Roee #160 N3).
+        remove_fifos
         [ -n "${BAITCACHE:-}" ] && [ -d "$BAITCACHE" ] && rm -rf "$BAITCACHE"
         return 0
     fi
