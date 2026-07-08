@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { Monitor } from "lucide-react";
 import type { AlertStatus, DeploymentState, EndpointStatus } from "../api";
 
 export function Topbar({ title, action }: { title: string; action?: ReactNode }) {
@@ -85,7 +86,53 @@ export function EndpointBadge({ status }: { status: EndpointStatus }) {
   );
 }
 
+function platformLabel(platform: string | null): string {
+  if (!platform) return "unknown";
+  const normalized = platform.toLowerCase();
+  if (normalized === "darwin") return "macOS";
+  if (normalized === "win32" || normalized === "windows") return "Windows";
+  if (normalized === "linux") return "Linux";
+  return platform;
+}
+
+export function PlatformBadge({ platform }: { platform: string | null }) {
+  return (
+    <span className="platform-badge" title={platform ?? "unknown platform"}>
+      <Monitor size={13} aria-hidden="true" />
+      {platformLabel(platform)}
+    </span>
+  );
+}
+
 /** Monospace block with a copy button - used for the install command. */
+async function copyText(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall back below; clipboard.writeText can reject outside secure contexts.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 export function CopyField({ value }: { value: string }) {
   const [label, setLabel] = useState("Copy");
   return (
@@ -93,13 +140,9 @@ export function CopyField({ value }: { value: string }) {
       <code>{value}</code>
       <button
         className="btn"
-        onClick={() => {
-          if (navigator.clipboard) {
-            navigator.clipboard.writeText(value);
-            setLabel("✓ Copied");
-          } else {
-            setLabel("Copy failed, try manually");
-          }
+        onClick={async () => {
+          const copied = await copyText(value);
+          setLabel(copied ? "✓ Copied" : "Copy failed, try manually");
           setTimeout(() => setLabel("Copy"), 1200);
         }}
       >
@@ -110,9 +153,42 @@ export function CopyField({ value }: { value: string }) {
 }
 
 export function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    cardRef.current?.focus({ preventScroll: true });
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onCloseRef.current();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previousFocus instanceof HTMLElement) {
+        previousFocus.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="card modal-card" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={cardRef}
+        className="card modal-card"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>
@@ -127,4 +203,8 @@ export function timeAgo(iso: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+export function TimeAgo({ iso }: { iso: string }) {
+  return <span title={new Date(iso).toLocaleString()}>{timeAgo(iso)}</span>;
 }

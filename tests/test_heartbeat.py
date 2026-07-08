@@ -165,3 +165,50 @@ def test_state_endpoint_rejects_bad_token(client_db):
                    headers={"Authorization": "Bearer wrong"}, data={"state": "planted"})
 
     assert resp.status_code == 401
+
+
+# ── GET /agent/deployments/{id}/content (#200) ───────────────────────────────
+
+def test_content_endpoint_returns_bait_body(client_db):
+    tc, db = client_db
+    _seed_endpoint(db)
+    _seed_deployment(db, "dp_1")
+
+    resp = tc.get("/api/agent/deployments/dp_1/content",
+                  headers={"Authorization": "Bearer tok_abc"})
+
+    assert resp.status_code == 200
+    assert resp.text == "bait-body"
+
+
+def test_content_endpoint_rejects_other_endpoints_deployment(client_db):
+    tc, db = client_db
+    _seed_endpoint(db, eid="ep_1", token="tok_abc")
+    _seed_endpoint(db, eid="ep_2", token="tok_def")
+    _seed_deployment(db, "dp_2", eid="ep_2")
+
+    resp = tc.get("/api/agent/deployments/dp_2/content",
+                  headers={"Authorization": "Bearer tok_abc"})
+
+    assert resp.status_code == 404
+
+
+def test_content_endpoint_unknown_deployment_404(client_db):
+    tc, db = client_db
+    _seed_endpoint(db)
+
+    resp = tc.get("/api/agent/deployments/dp_nope/content",
+                  headers={"Authorization": "Bearer tok_abc"})
+
+    assert resp.status_code == 404
+
+
+def test_content_endpoint_rejects_bad_token(client_db):
+    tc, db = client_db
+    _seed_endpoint(db)
+    _seed_deployment(db, "dp_1")
+
+    resp = tc.get("/api/agent/deployments/dp_1/content",
+                  headers={"Authorization": "Bearer wrong"})
+
+    assert resp.status_code == 401

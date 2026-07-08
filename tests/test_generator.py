@@ -1,3 +1,4 @@
+import base64
 import json
 
 import pytest
@@ -50,6 +51,14 @@ def test_generate_github_token_has_oauth_file_shape():
     assert "user: ci-deploy-bot" in token
 
 
+def test_generate_gitlab_token_has_pat_file_shape():
+    token = generate_token("gitlab")
+
+    assert "gitlab.com:" in token
+    assert "token: glpat-" in token
+    assert "user: ci-deploy-bot" in token
+
+
 def test_generate_npm_token_has_npmrc_shape():
     token = generate_token("npm")
 
@@ -58,6 +67,19 @@ def test_generate_npm_token_has_npmrc_shape():
     token_value = token.removeprefix(prefix).strip()
     assert len(token_value) == 36
     assert set(token_value) <= ALNUM_ALPHABET
+
+
+def test_generate_docker_token_has_config_json_shape():
+    token = generate_token("docker")
+    data = json.loads(token)
+
+    registry = data["auths"]["https://index.docker.io/v1/"]
+    decoded_auth = base64.b64decode(registry["auth"]).decode()
+    username, password = decoded_auth.split(":", 1)
+    assert username == "ci-deploy-bot"
+    assert password.startswith("dckr_pat_")
+    assert len(password.removeprefix("dckr_pat_")) == 44
+    assert set(password.removeprefix("dckr_pat_")) <= ALNUM_ALPHABET
 
 
 def test_generate_gcp_token_has_service_account_json_shape():

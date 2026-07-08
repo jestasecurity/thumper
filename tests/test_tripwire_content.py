@@ -1,4 +1,5 @@
 """Tripwire token is generated at creation time and stored in the tripwires table."""
+import json
 from unittest.mock import patch
 
 import pytest
@@ -57,6 +58,38 @@ def test_post_tripwire_generates_npmrc_token(client_db):
     row = store.get_tripwire(db, tid)
     assert row.token is not None
     assert row.token.startswith("//registry.npmjs.org/:_authToken=npm_")
+
+
+def test_post_tripwire_generates_gitlab_pat(client_db):
+    tc, db = client_db
+    resp = tc.post("/api/tripwires", json={
+        "name": "gitlab-bait", "token_type": "gitlab",
+        "path": "~/.config/glab-cli/config.yml", "source": "template",
+    })
+    assert resp.status_code == 200
+    tid = resp.json()["id"]
+
+    db.expire_all()
+    row = store.get_tripwire(db, tid)
+    assert row.token is not None
+    assert "glpat-" in row.token
+
+
+def test_post_tripwire_generates_docker_config_token(client_db):
+    tc, db = client_db
+    resp = tc.post("/api/tripwires", json={
+        "name": "docker-bait", "token_type": "docker",
+        "path": "~/.docker/config.json", "source": "template",
+    })
+    assert resp.status_code == 200
+    tid = resp.json()["id"]
+
+    db.expire_all()
+    row = store.get_tripwire(db, tid)
+    assert row.token is not None
+    data = json.loads(row.token)
+    assert "https://index.docker.io/v1/" in data["auths"]
+    assert isinstance(data["auths"]["https://index.docker.io/v1/"]["auth"], str)
 
 
 def test_enroll_uses_stored_tripwire_token(client_db):

@@ -1,6 +1,6 @@
 # Adding a honeytoken type
 
-Thumper ships with six built-in token types (`aws`, `github`, `npm`, `gcp`, `azure`, `ssh`). Adding a new one touches exactly two files and one test, and both files must stay in sync or the API will accept the type name but fail to generate content.
+Thumper ships with seven built-in token types (`aws`, `github`, `npm`, `docker`, `gcp`, `azure`, `ssh`). Adding a new one touches exactly two files and one test, and both files must stay in sync or the API will accept the type name but fail to generate content.
 
 ## The two touch points
 
@@ -107,3 +107,4 @@ pytest -v
 - [ ] `generator.py` — matching `if token_type == "..."` branch added
 - [ ] `tests/test_tripwire_content.py` — new test added
 - [ ] `pytest -v` passes
+- [ ] `CHANGELOG.md` — bump the "N built-in types" count and add the new type to the list

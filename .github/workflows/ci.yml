@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "26" # match the Dockerfile's node base
           cache: npm
@@ -77,6 +77,10 @@ jobs:
 
       - name: Build UI
         run: npm run build
+        working-directory: ui
+
+      - name: Run UI tests
+        run: npm run test
         working-directory: ui
 
   docker-build:

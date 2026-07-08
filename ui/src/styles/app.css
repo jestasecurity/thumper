@@ -203,6 +203,13 @@ tr.clickable:hover td { background: var(--bg-elev2); cursor: pointer; }
 .badge.failed, .badge.unknown,
 .badge.triggered { background: rgba(255, 93, 93, 0.12); color: var(--danger); border-color: rgba(255, 93, 93, 0.28); }
 .badge.resolved { background: rgba(139, 148, 168, 0.10); color: var(--text-dim); border-color: var(--border); }
+.platform-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 8px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-dim);
+  background: var(--bg-elev); font-size: 12px; font-weight: 600;
+}
+.platform-badge svg { color: var(--text-faint); }
 
 /* segmented filter (alert status: open / all / resolved) */
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -305,6 +312,10 @@ tr.clickable:hover td { background: var(--bg-elev2); cursor: pointer; }
 .countdown-badge {
   font-size: 11px; font-weight: 500; color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+}
+.select-compact {
+  width: auto; min-width: 72px; padding: 6px 28px 6px 9px;
+  font-size: 12px;
 }
 @keyframes reload-flash {
   0% { opacity: 1; }

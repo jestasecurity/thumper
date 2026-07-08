@@ -37,6 +37,19 @@ TOKEN_TYPES = [
                        "exfiltrates these to self-replicate via the API.",
     },
     {
+        "type": "gitlab",
+        "display_name": "GitLab PAT",
+        "default_path": "~/.config/glab-cli/config.yml",
+        "suggested_paths": [
+            "~/.config/glab-cli/config.yml",
+            "~/.python-gitlab.cfg",
+            "~/.git-credentials",
+            "~/.env",
+        ],
+        "description": "Fake GitLab personal access token. CI/dev workstations often "
+                       "store these for repository and pipeline automation.",
+    },
+    {
         "type": "npm",
         "display_name": "npm token",
         "default_path": "~/.npmrc",
@@ -48,6 +61,18 @@ TOKEN_TYPES = [
         "description": "Fake npm registry auth token (~/.npmrc). The credential "
                        "the Shai-Hulud worm scans for first to self-publish "
                        "malicious packages.",
+    },
+    {
+        "type": "docker",
+        "display_name": "Docker registry auth",
+        "default_path": "~/.docker/config.json",
+        "suggested_paths": [
+            "~/.docker/config.json",
+            "~/.dockercfg",
+            "~/project/.docker/config.json",
+        ],
+        "description": "Fake Docker registry auth config. Supply-chain attackers "
+                       "scan this file for registry credentials they can exfiltrate.",
     },
     {
         "type": "gcp",

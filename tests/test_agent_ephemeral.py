@@ -26,6 +26,13 @@ AGENT = Path(__file__).resolve().parents[1] / "agent" / "thumper_agent.sh"
 BAIT_BODY = "BAIT-honeytoken-content"
 
 
+# Teardown wait for the agent process to exit after SIGTERM. The exit trap
+# (stop_watcher -> pkill children, remove_fifos, cleanup_heartbeat, release
+# the singleton lock) spawns several helper subprocesses (ps/pkill/lsof);
+# on a loaded macOS CI runner that teardown can exceed a tight 5s and flake
+# the test (e.g. test_heartbeat_success_is_logged), so allow generous headroom.
+AGENT_EXIT_TIMEOUT = 30
+
 class _StubHandler(http.server.BaseHTTPRequestHandler):
     """Minimal Thumper server stub for ephemeral tests."""
 
@@ -135,7 +142,7 @@ def stub(tmp_path):
         for p in procs:
             try:
                 p.send_signal(signal.SIGTERM)
-                p.wait(timeout=5)
+                p.wait(timeout=AGENT_EXIT_TIMEOUT)
             except (subprocess.TimeoutExpired, ProcessLookupError):
                 try:
                     p.send_signal(signal.SIGKILL)
@@ -212,7 +219,7 @@ def test_ephemeral_auto_decommissions_on_terminate(stub):
 
     # Agent should exit cleanly.
     try:
-        proc.wait(timeout=5)
+        proc.wait(timeout=AGENT_EXIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         proc.send_signal(signal.SIGKILL)
         pytest.fail("agent did not exit after SIGTERM + decommission")

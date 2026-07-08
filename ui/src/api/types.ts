@@ -1,7 +1,7 @@
 // These types mirror the FastAPI backend's response models. Keep them in sync
 // with server/thumper/models.py - this is the contract between UI and server.
 
-export type TokenType = "aws" | "github" | "gcp" | "azure" | "ssh";
+export type TokenType = "aws" | "github" | "npm" | "docker" | "gcp" | "azure" | "ssh";
 
 /** Where the bait content comes from. Only "template" is active in v1; the
  *  others are wired in the UI as coming-soon. */
@@ -87,7 +87,7 @@ export interface EndpointDetail extends Endpoint {
   deployments: Deployment[];
 }
 
-/** A fired tripwire - enriched by the endpoint monitor (fs_usage). */
+/** A fired tripwire - enriched by the endpoint monitor. */
 export interface Alert {
   id: string;
   deployment_id: string;

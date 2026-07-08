@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Trash2 } from "lucide-react";
 import type { EndpointDetail as ED, Tripwire } from "../api";
 import { api, ApiError } from "../api";
-import { DeployBadge, EndpointBadge, timeAgo, Topbar } from "../components/ui.tsx";
+import { DeployBadge, EndpointBadge, PlatformBadge, TimeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
@@ -119,9 +119,9 @@ export default function EndpointDetail() {
         <div className="card">
           <div className="row" style={{ gap: 10 }}>
             <EndpointBadge status={ep.status} />
-            <span className="muted">{ep.platform ?? "unknown platform"}</span>
-            <span className="muted">enrolled {timeAgo(ep.enrolled_at)}</span>
-            <span className="muted">last seen {ep.last_seen ? timeAgo(ep.last_seen) : "-"}</span>
+            <PlatformBadge platform={ep.platform} />
+            <span className="muted">enrolled <TimeAgo iso={ep.enrolled_at} /></span>
+            <span className="muted">last seen {ep.last_seen ? <TimeAgo iso={ep.last_seen} /> : "-"}</span>
           </div>
         </div>
 
@@ -187,8 +187,8 @@ export default function EndpointDetail() {
                       <Link to={`/tripwires/${d.tripwire_id}`}>{nameOf(d.tripwire_id)}</Link>
                     </td>
                     <td className="path">{d.id}</td>
-                    <td className="muted">{timeAgo(d.created_at)}</td>
-                    <td className="muted">{d.last_triggered ? timeAgo(d.last_triggered) : "-"}</td>
+                    <td className="muted"><TimeAgo iso={d.created_at} /></td>
+                    <td className="muted">{d.last_triggered ? <TimeAgo iso={d.last_triggered} /> : "-"}</td>
                     <td><DeployBadge state={d.state} triggered={d.triggered_count} endpointStatus={d.endpoint_status} /></td>
                     <td>
                       <button

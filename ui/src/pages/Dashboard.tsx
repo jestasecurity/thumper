@@ -3,22 +3,50 @@ import { Link, useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import type { Alert, DashboardStats, Tripwire } from "../api";
 import { api } from "../api";
-import { AlertBadge, timeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
+import { AlertBadge, Modal, TimeAgo, Topbar, TripwireBadge, TypeTag } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
 
 type AlertFilter = "open" | "all" | "resolved";
+
+const REFRESH_INTERVAL_STORAGE_KEY = "thumper.dashboard.refreshInterval";
+const REFRESH_INTERVAL_OPTIONS = [
+  { value: 0, label: "Off" },
+  { value: 15, label: "15s" },
+  { value: 30, label: "30s" },
+  { value: 60, label: "60s" },
+  { value: 300, label: "5m" },
+];
+
+function readStoredRefreshInterval(): number | null {
+  try {
+    const raw = window.localStorage.getItem(REFRESH_INTERVAL_STORAGE_KEY);
+    if (raw === null) return null;
+    const value = Number(raw);
+    return REFRESH_INTERVAL_OPTIONS.some((option) => option.value === value) ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [tripwires, setTripwires] = useState<Tripwire[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [refreshInterval, setRefreshInterval] = useState(60);
+  const storedRefreshIntervalRef = useRef<number | null>(readStoredRefreshInterval());
+  const [refreshInterval, setRefreshInterval] = useState(() => storedRefreshIntervalRef.current ?? 60);
   const [countdown, setCountdown] = useState(60);
   const [spinning, setSpinning] = useState(false);
   const [flash, setFlash] = useState(false);
   const [filter, setFilter] = useState<AlertFilter>("open");
+  const [confirmResolveAll, setConfirmResolveAll] = useState(false);
+  const [resolvingAll, setResolvingAll] = useState(false);
+  const [resolvingIds, setResolvingIds] = useState<Set<string>>(() => new Set());
   const nav = useNavigate();
   const countdownRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const resolvingAllRef = useRef(false);
+  const resolvingIdsRef = useRef<Set<string>>(new Set());
+  const hasStoredRefreshIntervalRef = useRef(storedRefreshIntervalRef.current !== null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const PAGE_TITLE = "Dashboard";
 
   const reload = useCallback(() => {
@@ -37,19 +65,32 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.getSettings().then((s) => {
-      const interval = s.dashboard.refresh_seconds;
+      const interval = hasStoredRefreshIntervalRef.current
+        ? storedRefreshIntervalRef.current ?? refreshInterval
+        : s.dashboard.refresh_seconds;
       setRefreshInterval(interval);
       setCountdown(interval);
+      setSettingsLoaded(true);
     });
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    if (!settingsLoaded) return;
+    try {
+      window.localStorage.setItem(REFRESH_INTERVAL_STORAGE_KEY, String(refreshInterval));
+      hasStoredRefreshIntervalRef.current = true;
+    } catch {
+      // Persistence is best-effort; blocked storage should not break the dashboard.
+    }
+  }, [refreshInterval, settingsLoaded]);
+
   const tickRef = useRef(refreshInterval);
 
   useEffect(() => {
-    if (refreshInterval <= 0) return;
     tickRef.current = refreshInterval;
     setCountdown(refreshInterval);
+    if (refreshInterval <= 0) return;
     countdownRef.current = setInterval(() => {
       tickRef.current -= 1;
       if (tickRef.current <= 0) {
@@ -69,13 +110,33 @@ export default function Dashboard() {
 
   const openAlerts = alerts.filter((a) => a.status === "open");
   const shownAlerts = (filter === "all" ? alerts : alerts.filter((a) => a.status === filter));
+  const resolvingAny = resolvingAll || resolvingIds.size > 0;
 
   function resolveOne(id: string) {
-    api.resolveAlert(id).then(reload);
+    if (resolvingAllRef.current || resolvingIdsRef.current.has(id)) return;
+    resolvingIdsRef.current = new Set(resolvingIdsRef.current).add(id);
+    setResolvingIds(resolvingIdsRef.current);
+    api.resolveAlert(id)
+      .then(reload)
+      .finally(() => {
+        const next = new Set(resolvingIdsRef.current);
+        next.delete(id);
+        resolvingIdsRef.current = next;
+        setResolvingIds(next);
+      });
   }
 
   function resolveAllOpen() {
-    api.resolveAllAlerts().then(reload);
+    if (resolvingAllRef.current) return;
+    setConfirmResolveAll(false);
+    resolvingAllRef.current = true;
+    setResolvingAll(true);
+    api.resolveAllAlerts()
+      .then(reload)
+      .finally(() => {
+        resolvingAllRef.current = false;
+        setResolvingAll(false);
+      });
   }
 
   return (
@@ -88,6 +149,18 @@ export default function Dashboard() {
             {refreshInterval > 0 && (
               <span className="countdown-badge">{countdown}s</span>
             )}
+            <select
+              className="select-compact"
+              aria-label="Auto-refresh interval"
+              value={refreshInterval}
+              onChange={(e) => setRefreshInterval(Number(e.target.value))}
+            >
+              {REFRESH_INTERVAL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <button className="btn-icon" title="Refresh" aria-label="Refresh" onClick={manualRefresh}>
               <RefreshCw size={15} className={spinning ? "spin" : ""} />
             </button>
@@ -141,8 +214,8 @@ export default function Dashboard() {
                 ))}
               </span>
               {openAlerts.length > 0 && (
-                <button className="btn small" onClick={resolveAllOpen}>
-                  Resolve all
+                <button className="btn small" onClick={() => setConfirmResolveAll(true)} disabled={resolvingAny}>
+                  {resolvingAll ? "Resolving…" : "Resolve all"}
                 </button>
               )}
             </span>
@@ -170,7 +243,7 @@ export default function Dashboard() {
               <tbody>
                 {shownAlerts.slice(0, 8).map((a) => (
                   <tr key={a.id}>
-                    <td className="muted">{timeAgo(a.timestamp)}</td>
+                    <td className="muted"><TimeAgo iso={a.timestamp} /></td>
                     <td><AlertBadge status={a.status} /></td>
                     <td>
                       <Link to={`/endpoints/${a.endpoint_id}`}>{a.endpoint_hostname}</Link>
@@ -187,8 +260,12 @@ export default function Dashboard() {
                     <td className="path">{a.accessed_path ?? "-"}</td>
                     <td style={{ textAlign: "right" }}>
                       {a.status === "open" && (
-                        <button className="btn small" onClick={() => resolveOne(a.id)}>
-                          Resolve
+                        <button
+                          className="btn small"
+                          onClick={() => resolveOne(a.id)}
+                          disabled={resolvingAll || resolvingIds.has(a.id)}
+                        >
+                          {resolvingIds.has(a.id) ? "Resolving…" : "Resolve"}
                         </button>
                       )}
                     </td>
@@ -234,6 +311,23 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {confirmResolveAll && (
+        <Modal onClose={() => setConfirmResolveAll(false)}>
+          <div className="card-head"><h2>Resolve all alerts</h2></div>
+          <p className="modal-intro">
+            This will resolve <strong>{openAlerts.length}</strong> open alert
+            {openAlerts.length === 1 ? "" : "s"}. This does not remove the underlying
+            tripwires or endpoint history.
+          </p>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn primary" onClick={resolveAllOpen} disabled={resolvingAll}>
+              {resolvingAll ? "Resolving…" : "Resolve all"}
+            </button>
+            <button className="btn" onClick={() => setConfirmResolveAll(false)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }

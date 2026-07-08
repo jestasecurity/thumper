@@ -11,6 +11,7 @@ generation lives on the SERVER (not the browser) because creating a tripwire
 also mints a per-token HMAC secret and callback binding - security-relevant work
 the client must not do.
 """
+import base64
 import json
 import secrets
 
@@ -51,8 +52,29 @@ def generate_token(token_type: str) -> str:
             "  user: ci-deploy-bot\n"
         )
 
+    if token_type == "gitlab":
+        return (
+            "gitlab.com:\n"
+            f"  token: glpat-{rand_alnum(20)}\n"
+            "  user: ci-deploy-bot\n"
+        )
+
     if token_type == "npm":
         return f"//registry.npmjs.org/:_authToken=npm_{rand_alnum(36)}\n"
+
+    if token_type == "docker":
+        password = f"dckr_pat_{rand_alnum(44)}"
+        auth = base64.b64encode(f"ci-deploy-bot:{password}".encode()).decode()
+        return json.dumps(
+            {
+                "auths": {
+                    "https://index.docker.io/v1/": {
+                        "auth": auth,
+                    },
+                },
+            },
+            indent=2,
+        )
 
     if token_type == "gcp":
         return json.dumps(
