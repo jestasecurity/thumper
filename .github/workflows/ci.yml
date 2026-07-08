@@ -79,6 +79,10 @@ jobs:
         run: npm run build
         working-directory: ui
 
+      - name: Run UI tests
+        run: npm run test
+        working-directory: ui
+
   docker-build:
     # Build the monolith image so base-image bumps and Dockerfile breakage are
     # caught in CI rather than at deploy time (#148).
