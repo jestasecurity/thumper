@@ -21,6 +21,13 @@ AGENT = Path(__file__).resolve().parents[1] / "agent" / "thumper_agent.sh"
 BAIT_BODY = "AKIA-BAIT\nsecret=shhh\n"
 
 
+# Teardown wait for the agent process to exit after SIGTERM. The exit trap
+# (stop_watcher -> pkill children, remove_fifos, cleanup_heartbeat, release
+# the singleton lock) spawns several helper subprocesses (ps/pkill/lsof);
+# on a loaded macOS CI runner that teardown can exceed a tight 5s and flake
+# the test (e.g. test_heartbeat_success_is_logged), so allow generous headroom.
+AGENT_EXIT_TIMEOUT = 30
+
 class Stub(http.server.BaseHTTPRequestHandler):
     callbacks = []  # POSTed callback bodies
     bait_path = ""  # absolute path the agent should plant
@@ -156,7 +163,7 @@ def test_callback_includes_reader_pid_and_user(server, tmp_path):
         )
     finally:
         p.terminate()
-        p.wait(timeout=5)
+        p.wait(timeout=AGENT_EXIT_TIMEOUT)
 
 
 def test_reading_the_fifo_fires_a_callback(server, tmp_path):
@@ -196,7 +203,7 @@ def test_reading_the_fifo_fires_a_callback(server, tmp_path):
         )
     finally:
         p.terminate()
-        p.wait(timeout=5)
+        p.wait(timeout=AGENT_EXIT_TIMEOUT)
 
 
 def test_clean_exit_removes_fifos(server, tmp_path):
@@ -226,7 +233,7 @@ def test_clean_exit_removes_fifos(server, tmp_path):
     )
     assert _wait(lambda: bait.exists())
     p.terminate()
-    p.wait(timeout=5)
+    p.wait(timeout=AGENT_EXIT_TIMEOUT)
     assert not bait.exists(), "FIFO left behind after clean exit"
 
 
@@ -292,7 +299,7 @@ def test_two_agents_one_host_both_detect(server, tmp_path):
         for p in procs:
             p.terminate()
         for p in procs:
-            p.wait(timeout=5)
+            p.wait(timeout=AGENT_EXIT_TIMEOUT)
 
 
 def test_duplicate_install_does_not_sweep_live_agents_fifo(server, tmp_path):
@@ -373,7 +380,7 @@ def test_duplicate_install_does_not_sweep_live_agents_fifo(server, tmp_path):
         )
     finally:
         p_a.terminate()
-        p_a.wait(timeout=5)
+        p_a.wait(timeout=AGENT_EXIT_TIMEOUT)
         import subprocess as _sp
 
         _sp.run(
@@ -421,7 +428,7 @@ def test_tampered_fifo_is_recovered(server, tmp_path):
         ), "tampered FIFO was not recovered - sensor left permanently blind"
     finally:
         p.terminate()
-        p.wait(timeout=5)
+        p.wait(timeout=AGENT_EXIT_TIMEOUT)
 
 
 def test_simulate_does_not_leave_a_no_reader_fifo(server, tmp_path):
