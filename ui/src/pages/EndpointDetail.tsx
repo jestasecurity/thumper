@@ -141,6 +141,9 @@ export default function EndpointDetail() {
                   {available.length > 0 && (
                     <>
                       <div className="picker-heading">Existing tripwires</div>
+                      <div className="muted" style={{ padding: "0 12px 8px", fontSize: 12 }}>
+                        Takes effect on the agent's next sync.
+                      </div>
                       {available.map((t) => (
                         <button
                           key={t.id}

@@ -67,6 +67,13 @@ export function DeployBadge({ state, triggered, endpointStatus }:
       </span>
     );
   }
+  if (state === "pending") {
+    return (
+      <span className="badge pending" title="waiting for agent sync">
+        <span className="dot" /> pending · waiting for sync
+      </span>
+    );
+  }
   const cls = state === "planted" ? "deployed" : state === "failed" ? "failed" : "pending";
   return (
     <span className={`badge ${cls}`}>
