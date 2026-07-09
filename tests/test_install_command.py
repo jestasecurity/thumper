@@ -88,3 +88,15 @@ def test_install_script_autoinstalls_inotify_tools(client_db):
     assert 'uname -s' in s          # gated to Linux
     for pm in ("apt-get", "dnf", "yum", "zypper", "apk", "pacman"):
         assert pm in s, f"missing package manager {pm}"
+
+
+def test_install_script_prints_startup_log_preview(client_db):
+    """After starting the agent, the installer should show a short log preview
+    so command-line installs have immediate success/failure context (#13)."""
+    tc, _ = client_db
+    resp = tc.get("/api/install.sh", params={"token": "dev-install-token", "tripwire": "tw_x"})
+    assert resp.status_code == 200
+    s = resp.text
+    assert "thumper: first startup log lines:" in s
+    assert "sed -n '1,20p' \"$DIR/agent.log\"" in s
+    assert s.count("sed -n '1,20p' \"$DIR/agent.log\"") == 2

@@ -608,8 +608,16 @@ nohup sh "$DIR/thumper_agent.sh" run \\
 sleep 1
 if kill -0 $! 2>/dev/null; then
   echo "thumper: agent installed in $DIR and watching (logs: $DIR/agent.log)"
+  if [ -s "$DIR/agent.log" ]; then
+    echo "thumper: first startup log lines:"
+    sed -n '1,20p' "$DIR/agent.log"
+  fi
 else
   echo "thumper: agent exited immediately; check $DIR/agent.log" >&2
+  if [ -s "$DIR/agent.log" ]; then
+    echo "thumper: first startup log lines:" >&2
+    sed -n '1,20p' "$DIR/agent.log" >&2
+  fi
   exit 1
 fi
 """
