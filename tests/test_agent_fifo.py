@@ -481,3 +481,13 @@ def test_atime_stat_order_prefers_portable_access_time():
             f'stat -f %a {badvar} 2>/dev/null || stat -c %X' not in src
         ), "source must not contain the wrong stat order (stat -f %a before stat -c %X)"
     assert "watch_fs_usage" not in src, "fs_usage sensor must be removed"
+
+
+def test_atime_arm_uses_known_baseline_instead_of_racy_stat():
+    # #235: a read between arm_atime and read_atime used to become the baseline,
+    # swallowing that first access.  Both initial arm and re-arm must assign the
+    # known sentinel bound directly rather than sampling the filesystem again.
+    src = AGENT.read_text()
+    assert "ATIME_ARM_BASELINE=1000000000" in src
+    assert src.count('eval "atime_$i=$ATIME_ARM_BASELINE"') == 2
+    assert r'eval "atime_$i=\$(read_atime' not in src

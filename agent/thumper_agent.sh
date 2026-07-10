@@ -585,6 +585,11 @@ watch_inotify() {
 # so it's the primary layer that covers the FIFO sensor's blind spots
 # (statSync-guarded / mmap / scan-only readers). See #28, #100.
 ATIME_ARM_STAMP=200001010000   # `touch -t` stamp: 2000-01-01 00:00 - atime far in the past
+# A deliberately conservative upper bound for the armed timestamp.  Using the
+# known bound as the baseline closes the arm -> stat race: a read in that gap is
+# no longer captured as the baseline and swallowed.  2000-01-01 is below 1e9 in
+# every supported timezone; a real read on a contemporary host is above it.
+ATIME_ARM_BASELINE=1000000000
 arm_atime() {  # arm_atime <path>: set atime to the past so the next read bumps it (relatime/APFS)
     # -c: never CREATE the file. Arming a missing bait would otherwise leave an
     # empty file behind, making verify_planted think a failed-plant dep is planted
@@ -608,7 +613,7 @@ atime_poll() {
     for i in $1; do
         eval "p=\$dep_path_$i"
         arm_atime "$p"                                  # arm so relatime bumps atime on a read
-        eval "atime_$i=\$(read_atime \"\$p\")"
+        eval "atime_$i=$ATIME_ARM_BASELINE"
     done
     while true; do
         sleep "$POLL"
@@ -619,7 +624,7 @@ atime_poll() {
             if [ "$cur" != "0" ] && [ "$cur" -gt "$prev" ] 2>/dev/null; then
                 fire "$i" "atime-change" "" "" "" "$p"
                 arm_atime "$p"                          # RE-ARM so the NEXT read is detectable too
-                eval "atime_$i=\$(read_atime \"\$p\")"
+                eval "atime_$i=$ATIME_ARM_BASELINE"
             fi
         done
     done
