@@ -174,3 +174,23 @@ def test_force_overwrites_occupied_path(agent):
         assert stat.S_ISFIFO(Path(path).stat().st_mode), "bait not planted as FIFO"
     else:
         assert Path(path).read_text() == BAIT_BODY, "bait body not planted"
+
+
+def test_agent_refuses_server_supplied_traversal_path(agent, tmp_path):
+    """The agent is the last trust boundary before a root-level filesystem
+    write, so it must reject traversal even if a compromised control plane
+    returns one.  The refusal also has to happen before fetching bait content."""
+    _, run = agent
+    escaped = tmp_path / "escaped-creds"
+    traversal = str(tmp_path / "nested" / ".." / escaped.name)
+    _StubHandler.deployments = [{"id": "dep_traversal", "path": traversal}]
+    _StubHandler.seen = []
+
+    result = run("--sensor", "atime")
+
+    assert result.returncode == 0
+    assert "refusing bait path with '..'" in result.stderr
+    assert not escaped.exists(), "traversal target was written"
+    assert "/content/dep_traversal" not in _StubHandler.seen, (
+        "agent fetched bait content despite refusing the deployment path"
+    )
