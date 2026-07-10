@@ -979,8 +979,10 @@ run() {
     # release the singleton lock. Combined into one trap (replacing the release-
     # only trap set after acquire_singleton) so none clobbers the others.
     cleanup_heartbeat() { [ -n "$HEARTBEAT_PID" ] && kill "$HEARTBEAT_PID" 2>/dev/null; }
-    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton; exit 0' INT TERM
-    trap 'stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton' EXIT
+    # Disable the EXIT trap on a handled signal so cleanup and the shutdown log
+    # run exactly once. Natural exits retain their original status.
+    trap 'trap - EXIT; log "agent shutting down (signal)"; stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton; exit 0' INT TERM
+    trap 'log "agent shutting down (exit)"; stop_watcher; remove_fifos; cleanup_heartbeat; release_singleton' EXIT
     # Remote kill: the heartbeat loop raises USR1 when the server flags us.
     trap 'self_destruct' USR1
 

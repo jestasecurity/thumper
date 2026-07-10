@@ -139,6 +139,20 @@ def test_atime_sensor_plants_a_regular_file_and_arms_it(server, tmp_path):
         p.wait(timeout=5)
 
 
+def test_agent_logs_clean_shutdown(server, tmp_path):
+    bait = tmp_path / "credentials"
+    Stub.bait_path = str(bait)
+    p = _spawn(server, tmp_path)
+    assert _wait(lambda: bait.exists() and _atime(bait) < ARMED_MAX), (
+        "agent did not reach its watching state"
+    )
+
+    p.terminate()
+    stdout, _ = p.communicate(timeout=5)
+
+    assert stdout.count("agent shutting down (signal)") == 1
+
+
 def test_atime_sensor_is_rearmable(server, tmp_path):
     bait = tmp_path / "credentials"
     Stub.bait_path = str(bait)
