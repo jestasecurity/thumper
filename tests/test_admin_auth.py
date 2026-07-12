@@ -31,6 +31,7 @@ def client(monkeypatch):
     app.dependency_overrides[get_db] = lambda: db
     yield TestClient(app)
     del app.dependency_overrides[get_db]
+    app.dependency_overrides[require_admin] = lambda: None  # restore conftest's bypass
     db.close()
 
 
