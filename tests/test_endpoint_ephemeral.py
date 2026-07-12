@@ -60,7 +60,8 @@ def test_reenroll_updates_ephemeral_flag(client_db):
                                 machine_id="m-re-1", ephemeral=False)
     assert ep1.ephemeral == 0
     ep2 = store.enroll_endpoint(db, hostname="runner", platform="linux",
-                                machine_id="m-re-1", ephemeral=True)
+                                machine_id="m-re-1", agent_token=ep1.agent_token,
+                                ephemeral=True)
     assert ep2.id == ep1.id        # same row
     assert ep2.ephemeral == 1
 
@@ -68,10 +69,11 @@ def test_reenroll_updates_ephemeral_flag(client_db):
 def test_reenroll_clears_ephemeral_flag(client_db):
     """Re-enrolling an ephemeral machine as non-ephemeral should clear the flag."""
     _, db = client_db
-    store.enroll_endpoint(db, hostname="runner", platform="linux",
-                          machine_id="m-re-2", ephemeral=True)
+    ep1 = store.enroll_endpoint(db, hostname="runner", platform="linux",
+                                machine_id="m-re-2", ephemeral=True)
     ep = store.enroll_endpoint(db, hostname="runner", platform="linux",
-                               machine_id="m-re-2", ephemeral=False)
+                               machine_id="m-re-2", agent_token=ep1.agent_token,
+                               ephemeral=False)
     assert ep.ephemeral == 0
 
 

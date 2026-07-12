@@ -46,8 +46,7 @@ from ..plugins.registry import get_manifest, load_plugin, public_manifests
 from ..services.alerting import deliver_alert
 from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
-from ..services.integrations import (ConfigValidationError, mask_config, merge_config,
-                                     redact_secrets, saved_config, validate_config)
+from ..services.integrations import mask_config, merge_config, redact_secrets, saved_config
 from ..services.secrets_crypto import ConfigDecryptError, unpack_config
 from ..services.signing import verify
 from ..services.ssrf import SsrfError, assert_config_urls_allowed
@@ -482,10 +481,6 @@ def save_integration(plugin: str, config: dict, db: Session = Depends(get_db)):
     manifest = get_manifest(plugin)
     if manifest is None:
         raise HTTPException(404, "unknown plugin")
-    try:
-        validate_config(manifest, config)
-    except ConfigValidationError as exc:
-        raise HTTPException(400, str(exc))
     merged = merge_config(saved_config(db, plugin), config)
     try:
         assert_config_urls_allowed(plugin, merged)  # SSRF guard (#74)
@@ -657,10 +652,15 @@ async def enroll(request: Request, db: Session = Depends(get_db)):
 
     if not _token_eq(field("enroll_token"), ENROLL_TOKEN):
         raise HTTPException(401, "invalid enroll token")
-    endpoint = store.enroll_endpoint(db, hostname=field("hostname"),
-                                     platform=field("platform") or None,
-                                     machine_id=field("machine_id"),
-                                     ephemeral=field("ephemeral") == "1")
+    try:
+        endpoint = store.enroll_endpoint(db, hostname=field("hostname"),
+                                         platform=field("platform") or None,
+                                         machine_id=field("machine_id"),
+                                         agent_token=field("agent_token"),
+                                         ephemeral=field("ephemeral") == "1")
+    except store.MachineIdConflictError:
+        raise HTTPException(
+            409, "machine_id already enrolled - re-enroll requires its current agent_token")
     # Materialize a unique instance for each tripwire this install is scoped to.
     for tid in [t.strip() for t in field("tripwire_ids").split(",") if t.strip()]:
         tripwire = store.get_tripwire(db, tid)

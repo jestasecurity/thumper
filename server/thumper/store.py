@@ -1,6 +1,7 @@
 """Repository layer over SQLAlchemy ORM. All queries live here so the rest of
 the app deals in ORM model instances (attribute access: row.id, row.name, …).
 """
+import hmac
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
@@ -65,15 +66,33 @@ def delete_tripwire(db: Session, tid: str) -> bool:
 
 
 # ── endpoints ────────────────────────────────────────────────────────────────
+class MachineIdConflictError(Exception):
+    """Raised when a client re-enrolls an existing machine_id without proving
+    ownership via its current agent_token. The API turns this into a 409."""
+
+
 def enroll_endpoint(db: Session, *, hostname: str, platform: Optional[str],
-                    machine_id: str, ephemeral: bool = False) -> Endpoint:
+                    machine_id: str, agent_token: str = "",
+                    ephemeral: bool = False) -> Endpoint:
     """Upsert by machine_id. Returns the endpoint row (incl. agent_token).
 
+    Re-enrolling an EXISTING machine_id requires the caller to already hold
+    that endpoint's current agent_token, otherwise anyone holding the
+    shared ENROLL_TOKEN who learns or guesses a machine_id could hijack that
+    endpoint's identity and read back its agent_token. A genuinely new agent
+    always generates a fresh random machine_id (see gen_machine_id in
+    agent/thumper_agent.sh, uuidgen/kernel-random - never hardware-derived),
+    so this never blocks first-time enrollment or recovery after a lost
+    local state file: a lost state file means a fresh machine_id too.
+
     ephemeral=True marks a short-lived CI endpoint (issue #3): enrolled by the
-    GitHub Action on job start and removed/pruned when the job ends."""
+    GitHub Action on job start and removed/pruned when the job ends.
+    """
     existing = db.query(Endpoint).filter(Endpoint.machine_id == machine_id).first()
     now = iso_now()
     if existing:
+        if not hmac.compare_digest(agent_token, existing.agent_token):
+            raise MachineIdConflictError()
         existing.hostname = hostname
         existing.platform = platform
         existing.last_seen = now
