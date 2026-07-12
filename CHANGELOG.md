@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Removed stale dashboard copy that described the old macOS `fs_usage`/sudo-based tripwire sensor.
+- Rejected unknown or oversized config keys when saving an integration, instead of persisting them unvalidated.
 
 ## [0.1.0] - unreleased
 
