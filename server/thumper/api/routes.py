@@ -657,10 +657,15 @@ async def enroll(request: Request, db: Session = Depends(get_db)):
 
     if not _token_eq(field("enroll_token"), ENROLL_TOKEN):
         raise HTTPException(401, "invalid enroll token")
-    endpoint = store.enroll_endpoint(db, hostname=field("hostname"),
-                                     platform=field("platform") or None,
-                                     machine_id=field("machine_id"),
-                                     ephemeral=field("ephemeral") == "1")
+    try:
+        endpoint = store.enroll_endpoint(db, hostname=field("hostname"),
+                                         platform=field("platform") or None,
+                                         machine_id=field("machine_id"),
+                                         agent_token=field("agent_token"),
+                                         ephemeral=field("ephemeral") == "1")
+    except store.MachineIdConflictError:
+        raise HTTPException(
+            409, "machine_id already enrolled - re-enroll requires its current agent_token")
     # Materialize a unique instance for each tripwire this install is scoped to.
     for tid in [t.strip() for t in field("tripwire_ids").split(",") if t.strip()]:
         tripwire = store.get_tripwire(db, tid)

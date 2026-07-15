@@ -247,6 +247,7 @@ hmac_sha256() {  # hmac_sha256 <secret> <body>  -> sha256=<hex>
 do_enroll() {
     machine_id=$(state_get "$STATE_FILE" machine_id)
     [ -n "$machine_id" ] || machine_id=$(gen_machine_id)
+    existing_token=$(state_get "$STATE_FILE" agent_token)
 
     _enroll_extra=""
     [ "$EPHEMERAL" = 1 ] && _enroll_extra="--data-urlencode ephemeral=1"
@@ -257,6 +258,7 @@ do_enroll() {
         --data-urlencode "machine_id=$machine_id" \
         --data-urlencode "platform=$(platform)" \
         --data-urlencode "tripwire_ids=$TRIPWIRES" \
+        --data-urlencode "agent_token=$existing_token" \
         $_enroll_extra) || {
         err "enroll failed"; return 1; }
 
