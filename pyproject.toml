@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 dependencies = [
   "fastapi>=0.139.0",
-  "uvicorn[standard]>=0.50.2",
+  "uvicorn[standard]>=0.51.0",
   "pyyaml>=6.0.3",
   "httpx>=0.28.1",
   "sqlalchemy>=2.0.51",
@@ -20,7 +20,7 @@ dependencies = [
 # only curl + openssl - it has no Python dependencies of its own.
 postgres = ["psycopg[binary]>=3.3.4"]
 mysql = ["pymysql>=1.2.0"]
-dev = ["pytest>=9.1.1", "ruff>=0.15.20"]
+dev = ["pytest>=9.1.1", "ruff>=0.15.21"]
 
 [tool.pytest.ini_options]
 # Tests import `thumper`, which lives under server/. Put it on the path here so
