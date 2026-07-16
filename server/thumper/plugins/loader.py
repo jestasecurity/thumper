@@ -1,6 +1,6 @@
 """Discover and instantiate plugins from the filesystem.
 
-Drop a directory with a manifest.yaml + plugin.py into plugins/{deploy,alert}/
+Drop a directory with a manifest.yaml + plugin.py into plugins/{deploy,alert,vault}/
 and it shows up - no registration code, no imports to edit.
 
 Discovery and module loading are cached: the plugin set is fixed at process
@@ -14,7 +14,7 @@ import yaml
 
 from ..config import PLUGINS_DIR
 
-_KINDS = ("deploy", "alert")
+_KINDS = ("deploy", "alert", "vault")
 
 _manifest_cache: list[dict] | None = None
 _module_cache: dict[str, object] = {}
