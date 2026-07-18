@@ -635,6 +635,56 @@ watch_atime() { atime_poll "$(all_indices)"; }   # poll every bait (homogeneous 
 # restarted ONLY when the set actually changed - never periodically - so we never
 # blind ourselves between cycles.
 WATCH_PID=""
+WATCH_STARTED=""
+
+# Record sensor workers owned by the current supervisor. If that supervisor is
+# killed abruptly, its children are reparented and `pkill -P` can no longer find
+# them; this registry lets the sync loop remove those orphans before restart.
+process_start_fingerprint() {  # stable for one PID lifetime; empty if gone
+    # BSD `lstart` is second-resolution, so include the full command as an
+    # additional identity dimension while keeping this agent shell-only.
+    ps -o lstart=,command= -p "$1" 2>/dev/null |
+        sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+process_identity_matches() {  # process_identity_matches <pid> <fingerprint>
+    [ -n "${1:-}" ] && [ -n "${2:-}" ] || return 1
+    _identity_current=$(process_start_fingerprint "$1")
+    [ -n "$_identity_current" ] && [ "$_identity_current" = "$2" ]
+}
+
+watcher_identity_matches() {
+    [ -n "${WATCH_PID:-}" ] && [ -n "${WATCH_STARTED:-}" ] || return 1
+    process_identity_matches "$WATCH_PID" "$WATCH_STARTED"
+}
+
+write_watcher_workers() {  # write_watcher_workers <pid ...>
+    [ -n "${WATCH_WORKERS_FILE:-}" ] || return 0
+    _ww_tmp="$WATCH_WORKERS_FILE.tmp.$$"
+    : > "$_ww_tmp"
+    for _ww_pid in "$@"; do
+        [ -n "$_ww_pid" ] || continue
+        _ww_started=$(process_start_fingerprint "$_ww_pid")
+        [ -n "$_ww_started" ] && printf '%s\t%s\t%s\n' \
+            "$MAIN_PID" "$_ww_pid" "$_ww_started" >> "$_ww_tmp"
+    done
+    mv "$_ww_tmp" "$WATCH_WORKERS_FILE"
+}
+
+cleanup_watcher_workers() {
+    [ -f "${WATCH_WORKERS_FILE:-}" ] || return 0
+    _ww_tab=$(printf '\t')
+    while IFS="$_ww_tab" read -r _ww_owner _ww_pid _ww_started; do
+        case "$_ww_owner:$_ww_pid" in *[!0-9:]*|:|*:) continue ;; esac
+        [ "$_ww_owner" = "$MAIN_PID" ] || continue
+        # A bare PID is unsafe: the worker may have exited and its PID may have
+        # been reused during the sync interval. Kill only the exact process
+        # lifetime recorded by this main agent instance.
+        process_identity_matches "$_ww_pid" "$_ww_started" &&
+            kill "$_ww_pid" 2>/dev/null || true
+    done < "$WATCH_WORKERS_FILE"
+    rm -f "$WATCH_WORKERS_FILE"
+}
 
 snapshot() {  # emit the current set as "id<TAB>path" lines
     i=1
@@ -689,13 +739,28 @@ serve_fifo() {  # serve_fifo <i> - serve one bait FIFO forever; a read = a hit
 
 watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any that dies
     log "watching $DEP_COUNT bait file(s) via FIFO"
+    update_fifo_worker_registry() {
+        _worker_pids=""; _wr_i=1
+        while [ "$_wr_i" -le "$DEP_COUNT" ]; do
+            eval "_wr_pid=\$sf_pid_$_wr_i"
+            _worker_pids="$_worker_pids $_wr_pid"
+            _wr_i=$((_wr_i + 1))
+        done
+        # shellcheck disable=SC2086
+        write_watcher_workers $_worker_pids
+    }
     i=1
-    while [ "$i" -le "$DEP_COUNT" ]; do serve_fifo "$i" & eval "sf_pid_$i=\$!"; i=$((i + 1)); done
+    while [ "$i" -le "$DEP_COUNT" ]; do
+        serve_fifo "$i" &
+        eval "sf_pid_$i=\$! sf_started_$i=\$(process_start_fingerprint \"\$!\")"
+        i=$((i + 1))
+    done
+    update_fifo_worker_registry
     while :; do
         [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
         i=1
         while [ "$i" -le "$DEP_COUNT" ]; do
-            eval "_sp=\$sf_pid_$i _sf=\$dep_path_$i"
+            eval "_sp=\$sf_pid_$i _ss=\$sf_started_$i _sf=\$dep_path_$i"
             # Restart a writer that died while its FIFO still exists. Without this
             # that ONE bait has no writer, any reader's open() blocks forever, and
             # nothing fires - and verify_planted can't catch it because it only
@@ -704,7 +769,7 @@ watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any th
             # writers exit, so a single death among live siblings went unrecovered
             # until the next full re-plant restart. And we must NOT fall back to
             # atime: atime polling on a writerless pipe is silently blind.
-            if [ -p "$_sf" ] && ! kill -0 "$_sp" 2>/dev/null; then
+            if [ -p "$_sf" ] && ! process_identity_matches "$_sp" "$_ss"; then
                 # A deliberate stop sets WATCH_STOP_FLAG *before* it pkill's the
                 # writers, so re-check it here: a writer that just died because
                 # we're shutting down must NOT be respawned. Without this guard a
@@ -713,7 +778,9 @@ watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any th
                 # agent's stdout/stderr open, so on SIGTERM the process never
                 # reaches EOF and shutdown intermittently hangs.
                 [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
-                serve_fifo "$i" & eval "sf_pid_$i=\$!"
+                serve_fifo "$i" &
+                eval "sf_pid_$i=\$! sf_started_$i=\$(process_start_fingerprint \"\$!\")"
+                update_fifo_worker_registry
                 log "restarted dead FIFO writer for bait $i"
             fi
             i=$((i + 1))
@@ -730,13 +797,33 @@ watch_mixed() {
     _atidx=""; i=1
     while [ "$i" -le "$DEP_COUNT" ]; do
         if [ "$(effective_sensor "$i")" = fifo ]; then
-            serve_fifo "$i" & eval "sf_pid_$i=\$!"
+            serve_fifo "$i" &
+            eval "sf_pid_$i=\$! sf_started_$i=\$(process_start_fingerprint \"\$!\")"
         else
             _atidx="$_atidx $i"                         # atime/inotify/unknown -> atime poll (detection)
         fi
         i=$((i + 1))
     done
-    [ -n "$_atidx" ] && atime_poll "$_atidx" &
+    _atime_pid=""
+    if [ -n "$_atidx" ]; then
+        atime_poll "$_atidx" &
+        _atime_pid=$!
+        _atime_started=$(process_start_fingerprint "$_atime_pid")
+    fi
+    update_mixed_worker_registry() {
+        _worker_pids=""; _wr_i=1
+        while [ "$_wr_i" -le "$DEP_COUNT" ]; do
+            if [ "$(effective_sensor "$_wr_i")" = fifo ]; then
+                eval "_wr_pid=\$sf_pid_$_wr_i"
+                _worker_pids="$_worker_pids $_wr_pid"
+            fi
+            _wr_i=$((_wr_i + 1))
+        done
+        [ -n "$_atidx" ] && _worker_pids="$_worker_pids $_atime_pid"
+        # shellcheck disable=SC2086
+        write_watcher_workers $_worker_pids
+    }
+    update_mixed_worker_registry
     # Supervise the FIFO writers, exactly like watch_fifo: a serve_fifo that dies
     # leaves its pipe on disk, so any reader's open() blocks forever and that bait
     # is silently blind until a full restart (Roee #160 N1). Re-check the stop flag
@@ -744,13 +831,26 @@ watch_mixed() {
     # would hold the agent's stdout/stderr open on shutdown.
     while :; do
         [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+        # The mixed supervisor itself can stay alive after its atime child dies.
+        # Track that child explicitly so top-level WATCH_PID liveness cannot hide
+        # a partially blind sensor set (#99, follow-up from #160).
+        if [ -n "$_atidx" ] && ! process_identity_matches "$_atime_pid" "$_atime_started"; then
+            [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
+            atime_poll "$_atidx" &
+            _atime_pid=$!
+            _atime_started=$(process_start_fingerprint "$_atime_pid")
+            update_mixed_worker_registry
+            log "restarted dead atime watcher"
+        fi
         i=1
         while [ "$i" -le "$DEP_COUNT" ]; do
             if [ "$(effective_sensor "$i")" = fifo ]; then
-                eval "_sp=\$sf_pid_$i _sf=\$dep_path_$i"
-                if [ -p "$_sf" ] && ! kill -0 "$_sp" 2>/dev/null; then
+                eval "_sp=\$sf_pid_$i _ss=\$sf_started_$i _sf=\$dep_path_$i"
+                if [ -p "$_sf" ] && ! process_identity_matches "$_sp" "$_ss"; then
                     [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
-                    serve_fifo "$i" & eval "sf_pid_$i=\$!"
+                    serve_fifo "$i" &
+                    eval "sf_pid_$i=\$! sf_started_$i=\$(process_start_fingerprint \"\$!\")"
+                    update_mixed_worker_registry
                     log "restarted dead FIFO writer for bait $i"
                 fi
             fi
@@ -781,6 +881,12 @@ start_watcher() {  # launch the right sensor in the background; set WATCH_PID
         watch_atime &
     fi
     WATCH_PID=$!
+    WATCH_STARTED=$(process_start_fingerprint "$WATCH_PID")
+    if [ -z "$WATCH_STARTED" ]; then
+        # The supervisor exited before its identity could be captured. Leave no
+        # unverified PID that a later stop/restart path might signal.
+        WATCH_PID=""
+    fi
 }
 
 stop_watcher() {  # kill the watcher AND its serve_fifo children
@@ -788,10 +894,23 @@ stop_watcher() {  # kill the watcher AND its serve_fifo children
     : > "${WATCH_STOP_FLAG:-/dev/null}" 2>/dev/null || true  # mark stop deliberate
     # Reap children FIRST. Killing the parent subshell first reparents the
     # serve_fifo / inotifywait children to PID 1, after which `pkill -P` matches
-    # nothing and leaks them on every reconcile.
-    pkill -P "$WATCH_PID" 2>/dev/null || true
-    kill "$WATCH_PID" 2>/dev/null || true
+    # nothing and leaks them on every reconcile. The registry is the fallback
+    # for workers already orphaned by an abrupt supervisor death.
+    _old_watcher=$WATCH_PID
+    _old_watcher_matches=0
+    watcher_identity_matches && _old_watcher_matches=1
+    if [ "$_old_watcher_matches" = 1 ]; then
+        pkill -P "$_old_watcher" 2>/dev/null || true
+        kill "$_old_watcher" 2>/dev/null || true
+    fi
+    # Do not let start_watcher remove the stop flag until the old supervisor can
+    # no longer respawn workers or overwrite the registry for the next generation.
+    # `wait` is safe even when identity no longer matches: it addresses only this
+    # shell's original child job, never the unrelated process that reused its PID.
+    wait "$_old_watcher" 2>/dev/null || true
+    cleanup_watcher_workers
     WATCH_PID=""
+    WATCH_STARTED=""
 }
 
 remove_fifos() {  # remove every manifest path that is a FIFO (clean exit / startup sweep)
@@ -916,6 +1035,7 @@ run() {
     MANIFEST_FILE="$(dirname "$STATE_FILE")/planted.list"
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
     WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
+    WATCH_WORKERS_FILE="$(dirname "$STATE_FILE")/watcher.workers"
     mkdir -p "$(dirname "$STATE_FILE")"
     case "$SENSOR" in
         atime) FIFO_MODE=0; log "sensor: atime poll (regular-file bait, re-armable)" ;;
@@ -937,6 +1057,10 @@ run() {
     # CURRENT sensor: a prior FIFO run's leftover pipes must be cleared even when
     # this run is atime mode, else plant() would curl into a no-reader FIFO and
     # hang forever (only manifest paths that ARE FIFOs are removed, so it's safe).
+    # A worker registry is valid only for the main-process lifecycle that wrote
+    # it. Never act on stale PIDs from an earlier boot/run: they may have been
+    # reused by an unrelated process. Current-run supervisors recreate the file.
+    rm -f "$WATCH_WORKERS_FILE"
     remove_fifos
     resolve_target_user
 
@@ -1001,9 +1125,23 @@ run() {
         return 0
     fi
 
-    # Live sync: re-pull on an interval; restart the watcher only on a real change.
+    # Live sync: re-pull on an interval; restart the watcher on a real change or crash.
     while true; do
         sleep "$SYNC_INTERVAL"
+        # The watcher is a separate background process. A transient sensor crash
+        # must not leave the still-running sync loop permanently blind. This check
+        # runs at most once per sync interval, which is also a natural backoff
+        # when the underlying failure persists (#99).
+        if ! watcher_identity_matches; then
+            log "watcher exited unexpectedly - restarting"
+            # Reap the original child job before cleaning its orphan registry.
+            # If its PID was reused, wait still cannot target the unrelated process.
+            [ -n "${WATCH_PID:-}" ] && wait "$WATCH_PID" 2>/dev/null || true
+            WATCH_PID=""
+            WATCH_STARTED=""
+            cleanup_watcher_workers
+            start_watcher
+        fi
         _old=$(snapshot | sort)
         # A failed pull is often a dead token (DB reset / re-enroll needed), which
         # would otherwise retry forever - recover via resync (re-enroll, rate-

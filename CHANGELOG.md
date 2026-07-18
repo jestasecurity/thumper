@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Restarted dead endpoint sensor processes instead of leaving live-sync agents silently blind.
 - Removed stale dashboard copy that described the old macOS `fs_usage`/sudo-based tripwire sensor.
 - Rejected unknown or oversized config keys when saving an integration, instead of persisting them unvalidated.
 - Required a matching agent_token to re-enroll an existing machine_id, instead of upserting on the client-supplied value alone.

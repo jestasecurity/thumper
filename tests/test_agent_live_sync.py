@@ -176,6 +176,42 @@ def test_live_sync_plants_added_and_removes_dropped(agent):
     assert Path(keep).read_text() == BAIT_BODY, "kept bait disturbed"
 
 
+def test_live_sync_restarts_a_dead_watcher(agent):
+    """A transient sensor crash must not leave a live-sync agent blind forever.
+
+    Kill the atime watcher, wait for the sync loop to notice, then read the bait.
+    A callback proves the replacement watcher is functional rather than merely
+    proving that some short-lived shell child exists (issue #99).
+    """
+    keep = agent["keep"]
+    agent["set"]([{"id": "dep_keep", "path": keep}])
+    proc = agent["start"](
+        "--sensor", "atime", "--poll", "1",
+        "--sync-interval", "1", "--heartbeat", "0",
+    )
+    assert _wait_until(lambda: Path(keep).exists()), "initial bait not planted"
+
+    def direct_children():
+        result = subprocess.run(
+            ["pgrep", "-P", str(proc.pid)], capture_output=True, text=True
+        )
+        return [int(pid) for pid in result.stdout.split()]
+
+    assert _wait_until(lambda: len(direct_children()) == 1), \
+        "watcher child did not start"
+    dead_pid = direct_children()[0]
+    os.kill(dead_pid, signal.SIGKILL)
+    assert _wait_until(lambda: dead_pid not in direct_children()), \
+        "killed watcher did not exit"
+
+    # Give the sync loop one cycle to restart the watcher, then move atime to
+    # "now".  The replacement watcher must observe it and fire the callback.
+    time.sleep(2)
+    os.utime(keep, (time.time(), Path(keep).stat().st_mtime))
+    assert _wait_until(lambda: "/cb/dep_keep" in _StubHandler.seen, timeout=10), \
+        "replacement watcher did not detect a bait read"
+
+
 def test_reconcile_never_deletes_a_file_it_did_not_plant(agent):
     """Un-assigning a tripwire must NEVER delete a real credential sitting at that
     path - reconcile may only remove bait WE planted (issue #29 invariant). A

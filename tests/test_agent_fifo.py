@@ -389,6 +389,115 @@ def test_duplicate_install_does_not_sweep_live_agents_fifo(server, tmp_path):
         )
 
 
+def test_startup_does_not_kill_a_pid_from_a_stale_worker_registry(server, tmp_path):
+    """Registry PIDs from an earlier agent lifecycle may have been reused."""
+    bait = tmp_path / "bait_aws"
+    Stub.bait_path = str(bait)
+    unrelated = subprocess.Popen(["sleep", "30"])
+    try:
+        (tmp_path / "watcher.workers").write_text(f"stale\t{unrelated.pid}\tunknown\n")
+        result = _run(server, tmp_path, "--once")
+        assert result.returncode == 0
+        assert unrelated.poll() is None, "startup killed a process from stale registry data"
+        assert not (tmp_path / "watcher.workers").exists()
+    finally:
+        unrelated.terminate()
+        unrelated.wait(timeout=5)
+
+
+def test_live_cleanup_rejects_poisoned_worker_identity(server, tmp_path):
+    """A same-lifecycle registry row cannot kill a mismatched process lifetime."""
+    bait = tmp_path / "bait_aws"
+    Stub.bait_path = str(bait)
+    state = tmp_path / "agent.json"
+    workers = tmp_path / "watcher.workers"
+    proc = subprocess.Popen(
+        [
+            "sh", str(AGENT), "run", "--server",
+            f"http://127.0.0.1:{server.server_port}", "--enroll-token", "e",
+            "--tripwire", "tw_1", "--state-file", str(state),
+            "--heartbeat", "0", "--sync-interval", "1", "--sensor", "fifo",
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    unrelated = subprocess.Popen(["sleep", "30"])
+    try:
+        assert _wait(lambda: bait.exists() and workers.exists()), "watcher not ready"
+        # Poison a current-lifecycle row with an unrelated PID and an impossible
+        # start fingerprint, then kill the supervisor to trigger registry cleanup.
+        workers.write_text(f"{proc.pid}\t{unrelated.pid}\tdefinitely-not-its-start\n")
+        assert _wait(lambda: len(_children(proc.pid)) == 1), "supervisor not found"
+        os.kill(_children(proc.pid)[0], 9)
+        assert _wait(lambda: not workers.exists() or "definitely-not" not in workers.read_text())
+        assert unrelated.poll() is None, "cleanup killed a mismatched process lifetime"
+    finally:
+        unrelated.terminate()
+        unrelated.wait(timeout=5)
+        proc.terminate()
+        proc.wait(timeout=AGENT_EXIT_TIMEOUT)
+
+
+def test_live_sync_restart_cleans_orphaned_fifo_writer(server, tmp_path):
+    """Killing the supervisor must not leave its old FIFO writer behind (#99)."""
+    bait = tmp_path / "bait_aws"
+    Stub.bait_path = str(bait)
+    state = tmp_path / "agent.json"
+    workers = tmp_path / "watcher.workers"
+    proc = subprocess.Popen(
+        [
+            "sh", str(AGENT), "run", "--server",
+            f"http://127.0.0.1:{server.server_port}", "--enroll-token", "e",
+            "--tripwire", "tw_1", "--state-file", str(state),
+            "--heartbeat", "0", "--sync-interval", "1", "--sensor", "fifo",
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+
+
+    def worker_pids():
+        if not workers.exists():
+            return []
+        return [int(line.split("\t", 2)[1])
+                for line in workers.read_text().splitlines() if line]
+
+    try:
+        assert _wait(lambda: bait.exists() and worker_pids()), "watcher not ready"
+        assert _wait(lambda: len(_children(proc.pid)) == 1), "supervisor not found"
+        supervisor = _children(proc.pid)[0]
+        old_workers = worker_pids()
+        os.kill(supervisor, 9)
+
+        assert _wait(
+            lambda: worker_pids()
+            and not set(old_workers) & set(worker_pids())
+            and all(not _pid_alive(pid) for pid in old_workers),
+            timeout=15,
+        ), "old FIFO writer survived supervisor restart"
+
+        Stub.callbacks = []
+        assert Path(bait).read_text() == BAIT_BODY
+        assert _wait(lambda: any("event_type=open" in c for c in Stub.callbacks)), \
+            "replacement FIFO writer did not detect a read"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=AGENT_EXIT_TIMEOUT)
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def _children(pid):
+    result = subprocess.run(
+        ["pgrep", "-P", str(pid)], capture_output=True, text=True
+    )
+    return [int(child) for child in result.stdout.split()]
+
+
 def test_tampered_fifo_is_recovered(server, tmp_path):
     # Roee #123 F1: replacing the FIFO bait with a regular file must RECOVER (rm the
     # impostor + re-create the FIFO), not just report failed forever and go blind.
