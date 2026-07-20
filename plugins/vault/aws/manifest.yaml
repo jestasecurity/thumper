@@ -1,0 +1,36 @@
+name: aws
+kind: vault
+display_name: "AWS Secrets Manager"
+version: "0.1.0"
+author: thumper-core
+description: >
+  Connect to AWS Secrets Manager to plant and monitor canary secrets.
+  Uses IAM access keys and polls CloudTrail for secret read events.
+
+config_schema:
+  - key: region
+    label: "AWS Region"
+    type: string
+    required: true
+    placeholder: "us-east-1"
+    help: "The AWS region where secrets will be stored."
+
+  - key: access_key_id
+    label: "Access Key ID"
+    type: string
+    required: true
+    placeholder: "AKIA..."
+    help: "IAM access key with SecretsManager and CloudTrail read permissions."
+
+  - key: secret_access_key
+    label: "Secret Access Key"
+    type: secret
+    required: true
+    help: "The secret access key paired with the access key ID."
+
+  - key: prefix
+    label: "Secret Name Prefix"
+    type: string
+    required: false
+    placeholder: "thumper/"
+    help: "Optional prefix for all canary secret names in AWS. Helps organize secrets."
