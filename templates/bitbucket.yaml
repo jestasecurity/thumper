@@ -1,0 +1,13 @@
+name: "Bitbucket App Password"
+slug: bitbucket
+category: "R&D"
+format:
+  prefix: ""
+  length: 20
+  charset: alphanumeric
+suggested_paths:
+  - "production/bitbucket/app_password"
+  - "ci/bitbucket/access_token"
+metadata:
+  created_by: terraform
+  environment: production

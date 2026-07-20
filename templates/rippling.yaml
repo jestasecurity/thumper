@@ -1,0 +1,13 @@
+name: "Rippling API Key"
+slug: rippling
+category: "HR"
+format:
+  prefix: ""
+  length: 48
+  charset: alphanumeric
+suggested_paths:
+  - "production/rippling/api_key"
+  - "services/hr/rippling_key"
+metadata:
+  created_by: terraform
+  environment: production

@@ -1,0 +1,13 @@
+name: "NetSuite Consumer Secret"
+slug: netsuite
+category: Finance
+format:
+  prefix: ""
+  length: 64
+  charset: alphanumeric
+suggested_paths:
+  - "production/netsuite/consumer_secret"
+  - "services/finance/netsuite_secret"
+metadata:
+  created_by: terraform
+  environment: production

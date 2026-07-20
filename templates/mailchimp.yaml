@@ -1,0 +1,13 @@
+name: "Mailchimp API Key"
+slug: mailchimp
+category: Marketing
+format:
+  prefix: ""
+  length: 36
+  charset: alphanumeric_dash
+suggested_paths:
+  - "production/mailchimp/api_key"
+  - "services/email/mailchimp_key"
+metadata:
+  created_by: terraform
+  environment: production

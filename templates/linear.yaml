@@ -1,0 +1,13 @@
+name: "Linear API Key"
+slug: linear
+category: "Project Management"
+format:
+  prefix: "lin_api_"
+  length: 48
+  charset: alphanumeric
+suggested_paths:
+  - "production/linear/api_key"
+  - "services/pm/linear_key"
+metadata:
+  created_by: terraform
+  environment: production

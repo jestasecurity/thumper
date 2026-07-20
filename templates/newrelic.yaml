@@ -1,0 +1,13 @@
+name: "New Relic API Key"
+slug: newrelic
+category: "R&D"
+format:
+  prefix: "NRAK-"
+  length: 32
+  charset: uppercase_alphanumeric
+suggested_paths:
+  - "production/newrelic/api_key"
+  - "services/monitoring/newrelic_key"
+metadata:
+  created_by: terraform
+  environment: production
