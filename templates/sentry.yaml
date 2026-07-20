@@ -1,0 +1,13 @@
+name: "Sentry Auth Token"
+slug: sentry
+category: "R&D"
+format:
+  prefix: "sntrys_"
+  length: 64
+  charset: alphanumeric
+suggested_paths:
+  - "production/sentry/auth_token"
+  - "services/monitoring/sentry_token"
+metadata:
+  created_by: terraform
+  environment: production

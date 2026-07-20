@@ -1,0 +1,13 @@
+name: "GitHub Personal Access Token"
+slug: github
+category: "R&D"
+format:
+  prefix: "ghp_"
+  length: 40
+  charset: alphanumeric
+suggested_paths:
+  - "production/github/pat"
+  - "ci/github/access_token"
+metadata:
+  created_by: terraform
+  environment: production

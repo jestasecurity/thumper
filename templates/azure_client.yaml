@@ -1,0 +1,13 @@
+name: "Azure Client Secret"
+slug: azure_client
+category: "Cloud"
+format:
+  prefix: ""
+  length: 40
+  charset: alphanumeric_special
+suggested_paths:
+  - "production/azure/client_secret"
+  - "services/infra/azure_credentials"
+metadata:
+  created_by: terraform
+  environment: production

@@ -1,0 +1,13 @@
+name: "Brex API Token"
+slug: brex
+category: Finance
+format:
+  prefix: ""
+  length: 64
+  charset: alphanumeric
+suggested_paths:
+  - "production/brex/api_token"
+  - "services/finance/brex_token"
+metadata:
+  created_by: terraform
+  environment: production

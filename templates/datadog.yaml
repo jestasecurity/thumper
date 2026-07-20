@@ -1,0 +1,13 @@
+name: "Datadog API Key"
+slug: datadog
+category: "R&D"
+format:
+  prefix: ""
+  length: 32
+  charset: hex
+suggested_paths:
+  - "production/datadog/api_key"
+  - "services/monitoring/datadog_key"
+metadata:
+  created_by: terraform
+  environment: production

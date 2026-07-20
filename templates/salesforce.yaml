@@ -1,0 +1,13 @@
+name: "Salesforce Connected App Secret"
+slug: salesforce
+category: "CRM"
+format:
+  prefix: ""
+  length: 64
+  charset: alphanumeric
+suggested_paths:
+  - "production/salesforce/client_secret"
+  - "services/crm/salesforce_secret"
+metadata:
+  created_by: terraform
+  environment: production

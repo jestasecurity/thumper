@@ -1,0 +1,13 @@
+name: "GitLab Personal Access Token"
+slug: gitlab
+category: "R&D"
+format:
+  prefix: "glpat-"
+  length: 26
+  charset: alphanumeric_dash
+suggested_paths:
+  - "production/gitlab/pat"
+  - "ci/gitlab/access_token"
+metadata:
+  created_by: terraform
+  environment: production
