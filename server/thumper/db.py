@@ -119,6 +119,43 @@ class DeliveryAttempt(Base):
     )
 
 
+class VaultConnection(Base):
+    """A configured connection to a third-party secrets manager (a `vault`
+    plugin instance). `config_json` holds the plugin's saved config (with secret
+    fields packed by secrets_crypto); `configured` flips true once a connection
+    test passes."""
+    __tablename__ = "vault_connections"
+    id = Column(String(255), primary_key=True)
+    name = Column(String(255), nullable=False)
+    plugin = Column(String(255), nullable=False)
+    config_json = Column(Text, nullable=False, default="{}")
+    configured = Column(Boolean, nullable=False, default=False)
+    last_poll_at = Column(String(255))
+    created_at = Column(String(255), nullable=False)
+
+
+class CanarySecret(Base):
+    """A canary secret planted in a secrets manager via a VaultConnection.
+    `state`: pending -> planted -> triggered. `value` is the fake credential
+    written at `path`; a read of it (seen in the manager's audit log) fires."""
+    __tablename__ = "canary_secrets"
+    id = Column(String(255), primary_key=True)
+    vault_connection_id = Column(
+        String(255),
+        ForeignKey("vault_connections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    template = Column(String(255), nullable=False)
+    path = Column(String(255), nullable=False)
+    value = Column(Text, nullable=False)
+    state = Column(String(255), nullable=False, default="pending")
+    created_at = Column(String(255), nullable=False)
+    last_accessed_at = Column(String(255))
+    __table_args__ = (
+        Index("ix_canary_vault_conn", "vault_connection_id"),
+    )
+
+
 # ── engine + session ────────────────────────────────────────────────────────
 # Created lazily on first use rather than at import time, so a THUMPER_DB / dotenv
 # override applied after this module is imported (CLI, tests) still takes effect.
