@@ -1,0 +1,13 @@
+name: "SendGrid API Key"
+slug: sendgrid
+category: Marketing
+format:
+  prefix: "SG."
+  length: 69
+  charset: alphanumeric_special
+suggested_paths:
+  - "production/sendgrid/api_key"
+  - "services/email/sendgrid_key"
+metadata:
+  created_by: terraform
+  environment: production

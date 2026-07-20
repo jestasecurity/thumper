@@ -1,0 +1,13 @@
+name: "Snyk API Token"
+slug: snyk
+category: "R&D"
+format:
+  prefix: ""
+  length: 36
+  charset: hex
+suggested_paths:
+  - "production/snyk/api_token"
+  - "ci/snyk/auth_token"
+metadata:
+  created_by: terraform
+  environment: production

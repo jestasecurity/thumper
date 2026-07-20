@@ -1,0 +1,13 @@
+name: "Slack Bot Token"
+slug: slack
+category: Collaboration
+format:
+  prefix: "xoxb-"
+  length: 72
+  charset: alphanumeric_dash
+suggested_paths:
+  - "production/slack/bot_token"
+  - "services/notifications/slack_token"
+metadata:
+  created_by: terraform
+  environment: production

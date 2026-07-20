@@ -1,0 +1,13 @@
+name: "Notion Integration Token"
+slug: notion
+category: "Project Management"
+format:
+  prefix: "secret_"
+  length: 50
+  charset: alphanumeric
+suggested_paths:
+  - "production/notion/integration_token"
+  - "services/pm/notion_secret"
+metadata:
+  created_by: terraform
+  environment: production

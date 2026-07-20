@@ -1,0 +1,13 @@
+name: "Auth0 Client Secret"
+slug: auth0
+category: "Identity"
+format:
+  prefix: ""
+  length: 64
+  charset: alphanumeric_special
+suggested_paths:
+  - "production/auth0/client_secret"
+  - "services/identity/auth0_secret"
+metadata:
+  created_by: terraform
+  environment: production

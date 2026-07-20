@@ -1,0 +1,13 @@
+name: "AWS Access Key"
+slug: aws
+category: "Cloud"
+format:
+  prefix: "AKIA"
+  length: 20
+  charset: uppercase_alphanumeric
+suggested_paths:
+  - "production/aws/access_key_id"
+  - "services/infra/aws_credentials"
+metadata:
+  created_by: terraform
+  environment: production

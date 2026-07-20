@@ -1,0 +1,13 @@
+name: "Jira API Token"
+slug: jira
+category: "Project Management"
+format:
+  prefix: ""
+  length: 24
+  charset: alphanumeric
+suggested_paths:
+  - "production/jira/api_token"
+  - "services/pm/jira_token"
+metadata:
+  created_by: terraform
+  environment: production
