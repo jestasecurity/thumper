@@ -178,6 +178,55 @@ class TokenPreviewOut(BaseModel):
     content: str
 
 
+# ── honeytokens (third-party SaaS canaries) ─────────────────────────────────
+class CreateHoneytokenConnectionIn(BaseModel):
+    name: str
+    plugin: str
+    config: dict
+
+
+class UpdateHoneytokenConnectionIn(BaseModel):
+    name: str
+    config: dict
+
+
+class HoneytokenConnectionOut(BaseModel):
+    id: str
+    name: str
+    plugin: str
+    configured: bool
+    config: dict
+    last_poll_at: Optional[str] = None
+    created_at: str
+
+
+class CreateHoneytokenIn(BaseModel):
+    connection_id: str
+    name: str
+    options: dict = {}
+
+
+class HoneytokenOut(BaseModel):
+    id: str
+    connection_id: str
+    connection_name: str
+    name: str
+    token_id: str
+    token_type: str
+    state: str
+    created_at: str
+    last_used_at: Optional[str] = None
+
+
+class HoneytokenUsageLogOut(BaseModel):
+    id: str
+    event_id: Optional[str] = None
+    actor: Optional[str] = None
+    source_ip: Optional[str] = None
+    action: Optional[str] = None
+    timestamp: str
+
+
 # Agent-facing endpoints (/enroll, /agent/*, /trigger) speak a plain-text
 # protocol (key=value / tab-separated), not JSON, so the Bash agent needs no
 # JSON parser - see api/routes.py. They therefore have no Pydantic schemas here.
