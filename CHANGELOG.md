@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Secret Managers UI: connect a vault (HashiCorp / AWS Secrets Manager), plant
+  canary secrets from a template, and view recorded reads — under a new sidebar
+  section with Connections and Canary Secrets tabs.
 - Background poller that watches each configured secrets manager's audit log for
   canary-secret reads and raises an alert, deduped by the manager's event id.
 - Docker registry credentials honeytoken type for `~/.docker/config.json`.
