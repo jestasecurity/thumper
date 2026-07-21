@@ -43,6 +43,7 @@ from ..models import (
 )
 from ..plugins.base import PluginError
 from ..plugins.registry import get_manifest, load_plugin, public_manifests
+from .honeytoken_routes import honeytoken_router
 from ..services.alerting import deliver_alert
 from ..services.content import render_content
 from ..services.deploy import build_install, build_install_command, distribute
@@ -88,6 +89,10 @@ def require_admin(authorization: str = Header(default="")):
 # token - a route is public ONLY by explicitly opting onto agent_router.
 router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
 agent_router = APIRouter(prefix="/api")
+
+# Honeytoken (third-party SaaS canary) endpoints, mounted under the admin router
+# so they inherit require_admin like every other management route.
+router.include_router(honeytoken_router)
 
 
 def _validate_bait_path(path: str) -> str:
