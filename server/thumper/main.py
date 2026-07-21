@@ -19,6 +19,7 @@ from .config import (
     insecure_default_tokens)
 from .db import init_db
 from .services.secrets_crypto import encryption_enabled
+from .services.vault_poller import start_poller
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("thumper")
@@ -60,7 +61,13 @@ async def lifespan(app: FastAPI):
             "SECURITY: %s. Starting anyway because THUMPER_ALLOW_INSECURE_BASE_URL "
             "is set - use https:// (or a TLS-terminating proxy) in production.",
             detail)
-    yield
+    # Background poller: watches each configured secrets manager's audit log for
+    # canary reads. Cancelled on shutdown so tests / reloads don't leak the task.
+    poller_task = start_poller()
+    try:
+        yield
+    finally:
+        poller_task.cancel()
 
 
 app = FastAPI(title="Thumper", version=__version__, lifespan=lifespan)

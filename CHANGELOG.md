@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Background poller that watches each configured secrets manager's audit log for
+  canary-secret reads and raises an alert, deduped by the manager's event id.
 - Docker registry credentials honeytoken type for `~/.docker/config.json`.
 - Added absolute local-time tooltips to relative timestamps in the dashboard UI.
 

@@ -127,3 +127,53 @@ def test_delete_canary_secret(db):
     assert store.delete_canary_secret(db, cs.id) is True
     assert store.get_canary_secret(db, cs.id) is None
     assert store.delete_canary_secret(db, "cs_nope") is False
+
+
+# ── canary access logs ───────────────────────────────────────────────────────
+def _secret(db):
+    vc = store.create_vault_connection(db, name="T", plugin="hashicorp", config={})
+    return store.create_canary_secret(db, vault_connection_id=vc.id, template="s",
+                                      path="p", value="v")
+
+
+def test_record_canary_access(db):
+    cs = _secret(db)
+    row = store.record_canary_access(db, csid=cs.id, event_id="evt-1",
+                                     accessor="mallory", source_ip="10.0.0.1",
+                                     timestamp="2026-07-21T00:00:00Z")
+    assert row is not None
+    assert row.id.startswith("cal_")
+    assert row.accessor == "mallory"
+    assert row.created_at is not None
+
+
+def test_record_canary_access_dedupes_by_event_id(db):
+    cs = _secret(db)
+    first = store.record_canary_access(db, csid=cs.id, event_id="evt-1",
+                                       accessor="a", source_ip=None,
+                                       timestamp="2026-07-21T00:00:00Z")
+    dup = store.record_canary_access(db, csid=cs.id, event_id="evt-1",
+                                     accessor="a", source_ip=None,
+                                     timestamp="2026-07-21T00:05:00Z")
+    assert first is not None
+    assert dup is None
+    assert len(store.list_canary_access_logs(db, cs.id)) == 1
+
+
+def test_record_canary_access_without_event_id_is_not_deduped(db):
+    cs = _secret(db)
+    store.record_canary_access(db, csid=cs.id, event_id=None, accessor="a",
+                               source_ip=None, timestamp="2026-07-21T00:00:00Z")
+    store.record_canary_access(db, csid=cs.id, event_id=None, accessor="a",
+                               source_ip=None, timestamp="2026-07-21T00:01:00Z")
+    assert len(store.list_canary_access_logs(db, cs.id)) == 2
+
+
+def test_list_canary_access_logs_newest_first(db):
+    cs = _secret(db)
+    store.record_canary_access(db, csid=cs.id, event_id="e1", accessor="a",
+                               source_ip=None, timestamp="2026-07-21T00:00:00Z")
+    store.record_canary_access(db, csid=cs.id, event_id="e2", accessor="b",
+                               source_ip=None, timestamp="2026-07-21T09:00:00Z")
+    logs = store.list_canary_access_logs(db, cs.id)
+    assert [entry.event_id for entry in logs] == ["e2", "e1"]

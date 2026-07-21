@@ -12,8 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import (
-    Alert, CanarySecret, Deployment, DeliveryAttempt, Endpoint, Integration,
-    Tripwire, VaultConnection,
+    Alert, CanaryAccessLog, CanarySecret, Deployment, DeliveryAttempt, Endpoint,
+    Integration, Tripwire, VaultConnection,
 )
 from .models import iso_now
 from .services.secrets_crypto import pack_config
@@ -549,3 +549,33 @@ def delete_canary_secret(db: Session, csid: str) -> bool:
     db.delete(row)
     db.commit()
     return True
+
+
+def record_canary_access(db: Session, csid: str, event_id: Optional[str],
+                         accessor: Optional[str], source_ip: Optional[str],
+                         timestamp: str) -> Optional[CanaryAccessLog]:
+    """Record one read of a canary secret. Returns None (recording nothing) when
+    `event_id` is set and already logged for this secret, so a re-poll of the
+    same audit window neither double-records nor re-alerts a single read."""
+    if event_id:
+        existing = db.query(CanaryAccessLog).filter(
+            CanaryAccessLog.canary_secret_id == csid,
+            CanaryAccessLog.event_id == event_id,
+        ).first()
+        if existing:
+            return None
+    row = CanaryAccessLog(
+        id=_id("cal"), canary_secret_id=csid, event_id=event_id,
+        accessor=accessor, source_ip=source_ip, timestamp=timestamp,
+        created_at=iso_now(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_canary_access_logs(db: Session, csid: str) -> list[CanaryAccessLog]:
+    return db.query(CanaryAccessLog).filter(
+        CanaryAccessLog.canary_secret_id == csid,
+    ).order_by(CanaryAccessLog.timestamp.desc()).all()
