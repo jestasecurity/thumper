@@ -18,6 +18,7 @@ from .config import (
     ALLOWED_ORIGINS, UI_DIST, base_url_fail_closed, insecure_base_url,
     insecure_default_tokens)
 from .db import init_db
+from .services.honeytoken_poller import start_poller as start_honeytoken_poller
 from .services.secrets_crypto import encryption_enabled
 
 logging.basicConfig(level=logging.INFO)
@@ -60,7 +61,13 @@ async def lifespan(app: FastAPI):
             "SECURITY: %s. Starting anyway because THUMPER_ALLOW_INSECURE_BASE_URL "
             "is set - use https:// (or a TLS-terminating proxy) in production.",
             detail)
-    yield
+    # Background poller: watches each configured SaaS platform's audit log for
+    # honeytoken use. Cancelled on shutdown so tests / reloads don't leak it.
+    honeytoken_poller = start_honeytoken_poller()
+    try:
+        yield
+    finally:
+        honeytoken_poller.cancel()
 
 
 app = FastAPI(title="Thumper", version=__version__, lifespan=lifespan)

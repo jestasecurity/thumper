@@ -52,6 +52,10 @@ ALLOWED_ORIGINS = [o.strip() for o in os.environ.get(
 # the plugin *framework* - base classes + loader).
 PLUGINS_DIR = Path(os.environ.get("THUMPER_PLUGINS_DIR", str(REPO_ROOT / "plugins")))
 
+# Seconds between honeytoken-usage poll cycles (the background poller that checks
+# each configured SaaS platform's audit log for use of a planted honeytoken).
+HONEYTOKEN_POLL_INTERVAL = int(os.environ.get("THUMPER_HONEYTOKEN_POLL_INTERVAL", "60"))
+
 # Database URL (SQLAlchemy format). A bare filesystem path is mapped to SQLite.
 _db_raw = os.environ.get("THUMPER_DB", str(REPO_ROOT / "thumper.db"))
 DB_URL = _db_raw if "://" in _db_raw else f"sqlite:///{_db_raw}"
