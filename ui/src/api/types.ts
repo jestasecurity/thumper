@@ -119,7 +119,7 @@ export interface ConfigField {
   generate?: boolean; // offer a "Generate" button (e.g. a signing secret you create yourself)
 }
 
-export type PluginKind = "deploy" | "alert";
+export type PluginKind = "deploy" | "alert" | "vault";
 
 export interface PluginManifest {
   name: string;
@@ -145,6 +145,51 @@ export interface IntegrationTestResult {
   ok: boolean;
   error: string | null;
   tested_at: string;
+}
+
+// ── Vault / secret-manager canaries ──────────────────────────────────────────
+export type CanaryState = "pending" | "planted" | "failed" | "triggered";
+
+export interface VaultConnection {
+  id: string;
+  name: string;
+  plugin: string;
+  configured: boolean;
+  config: Record<string, string | boolean>;
+  last_poll_at?: string | null;
+  created_at: string;
+}
+
+export interface VaultConnectionTestResult {
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface CanaryTemplate {
+  slug: string;
+  name: string;
+  category: string;
+  suggested_paths: string[];
+}
+
+export interface CanarySecret {
+  id: string;
+  vault_connection_id: string;
+  vault_connection_name: string;
+  template: string;
+  template_name: string;
+  path: string;
+  state: CanaryState;
+  created_at: string;
+  last_accessed_at?: string | null;
+}
+
+export interface CanaryAccessLog {
+  id: string;
+  event_id: string | null;
+  accessor: string | null;
+  source_ip: string | null;
+  timestamp: string;
 }
 
 export interface VersionInfo {

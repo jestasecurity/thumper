@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import {
   Crosshair,
+  KeyRound,
   LayoutDashboard,
   MonitorDot,
   PanelLeftClose,
@@ -16,6 +17,8 @@ import CreateTripwire from "./pages/CreateTripwire.tsx";
 import Endpoints from "./pages/Endpoints.tsx";
 import EndpointDetail from "./pages/EndpointDetail.tsx";
 import Integrations from "./pages/Integrations.tsx";
+import VaultConnections from "./pages/VaultConnections.tsx";
+import CanarySecrets from "./pages/CanarySecrets.tsx";
 import Settings from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AdminGate from "./AdminGate.tsx";
@@ -89,6 +92,10 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           <span className="nav-icon"><MonitorDot size={18} /></span>{" "}
           <span className="nav-label">Endpoints</span>
         </NavLink>
+        <NavLink to="/vault" className={linkClass} title="Secret Managers">
+          <span className="nav-icon"><KeyRound size={18} /></span>{" "}
+          <span className="nav-label">Secret Managers</span>
+        </NavLink>
         <NavLink to="/integrations" className={linkClass} title="Integrations">
           <span className="nav-icon"><Plug size={18} /></span>{" "}
           <span className="nav-label">Integrations</span>
@@ -121,6 +128,8 @@ export default function App() {
           <Route path="/tripwires/:id" element={<TripwireDetail />} />
           <Route path="/endpoints" element={<Endpoints />} />
           <Route path="/endpoints/:id" element={<EndpointDetail />} />
+          <Route path="/vault" element={<VaultConnections />} />
+          <Route path="/vault/secrets" element={<CanarySecrets />} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />

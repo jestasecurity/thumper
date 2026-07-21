@@ -74,6 +74,15 @@ a { color: inherit; text-decoration: none; }
 .chip:hover { color: var(--text); border-color: var(--accent); }
 .chip.active { background: var(--accent-dim); color: var(--text); border-color: var(--accent); }
 
+/* horizontal page tabs (e.g. Secret Managers: Connections | Canary Secrets) */
+.nav-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.nav-tabs a {
+  padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--text-faint);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; text-decoration: none;
+}
+.nav-tabs a:hover { color: var(--text); }
+.nav-tabs a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
 /* install command + distribute result */
 .copyfield {
   display: flex; align-items: center; gap: 10px;

@@ -3,6 +3,9 @@
 import type {
   Alert,
   AppSettings,
+  CanaryAccessLog,
+  CanarySecret,
+  CanaryTemplate,
   CredentialSource,
   DashboardStats,
   Deployment,
@@ -16,6 +19,8 @@ import type {
   TokenTypeInfo,
   Tripwire,
   TripwireDetail,
+  VaultConnection,
+  VaultConnectionTestResult,
   VersionInfo,
 } from "./types";
 
@@ -131,6 +136,34 @@ export const httpApi = {
     req<IntegrationTestResult>(`/integrations/${plugin}/test`, { method: "POST" }),
   deleteIntegration: (plugin: string) =>
     req<{ status: string }>(`/integrations/${plugin}`, { method: "DELETE" }),
+
+  // Vault / secret-manager canaries
+  listVaultConnections: () => req<VaultConnection[]>("/vault/connections"),
+  createVaultConnection: (input: {
+    name: string;
+    plugin: string;
+    config: Record<string, string | boolean>;
+  }) => req<VaultConnection>("/vault/connections", { method: "POST", body: JSON.stringify(input) }),
+  updateVaultConnection: (id: string, input: {
+    name: string;
+    config: Record<string, string | boolean>;
+  }) => req<VaultConnection>(`/vault/connections/${id}`, { method: "PUT", body: JSON.stringify(input) }),
+  deleteVaultConnection: (id: string) =>
+    req<{ status: string }>(`/vault/connections/${id}`, { method: "DELETE" }),
+  testVaultConnection: (id: string) =>
+    req<VaultConnectionTestResult>(`/vault/connections/${id}/test`, { method: "POST" }),
+
+  listCanaryTemplates: () => req<CanaryTemplate[]>("/vault/templates"),
+  listCanarySecrets: () => req<CanarySecret[]>("/vault/secrets"),
+  createCanarySecret: (input: {
+    vault_connection_id: string;
+    template: string;
+    path: string;
+  }) => req<CanarySecret>("/vault/secrets", { method: "POST", body: JSON.stringify(input) }),
+  deleteCanarySecret: (id: string) =>
+    req<{ status: string }>(`/vault/secrets/${id}`, { method: "DELETE" }),
+  listCanaryAccessLogs: (id: string) =>
+    req<CanaryAccessLog[]>(`/vault/secrets/${id}/access-logs`),
 
   // Token catalog + preview (generation lives on the server)
   getTokenTypes: () => req<TokenTypeInfo[]>("/token-types"),
