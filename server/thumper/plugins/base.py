@@ -12,6 +12,7 @@ the `path` and HMAC `callback_url`/`hmac_secret` travel INSIDE the Token object,
 not as separate arguments.
 """
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
@@ -74,3 +75,47 @@ class AlertPlugin(ABC):
             "endpoint_hostname": "thumper-server",
             "message": "Thumper test event - your integration is wired up correctly.",
         })
+
+
+@dataclass
+class TokenUsageEvent:
+    """A detected usage of a honeytoken on a SaaS platform, parsed from that
+    platform's activity/audit log by a HoneytokenPlugin's poll_usage()."""
+    token_id: str
+    timestamp: str
+    actor: str | None = None
+    source_ip: str | None = None
+    action: str | None = None
+    extra: dict = field(default_factory=dict)
+
+
+class HoneytokenPlugin(ABC):
+    """Create fake credentials ("honeytokens") on third-party SaaS platforms and
+    poll each platform's audit log for any use of them. A plugin lives under
+    plugins/honeytoken/<name>/ (manifest.yaml + plugin.py with class `Plugin`)."""
+
+    def __init__(self, config: dict):
+        self.config = config or {}
+
+    @abstractmethod
+    def connect(self) -> None:
+        """Authenticate and verify connectivity. Raise PluginError on failure."""
+
+    @abstractmethod
+    def create_token(self, name: str, options: dict | None = None) -> dict:
+        """Create a honeytoken on the platform. Returns a dict with at least
+        {"token_id": "...", "token_type": "..."} (plus any metadata to persist)."""
+
+    @abstractmethod
+    def revoke_token(self, token_id: str) -> None:
+        """Revoke/delete the honeytoken on the platform. Raise on failure."""
+
+    @abstractmethod
+    def poll_usage(self, token_ids: list[str],
+                   since: str | None = None) -> list[TokenUsageEvent]:
+        """Return any usage of the given tokens seen in the platform's audit log
+        since `since` (an ISO-8601 cursor, or None for the plugin's default)."""
+
+    def test(self) -> None:
+        """Verify connectivity (default: calls connect). Plugins may override."""
+        self.connect()
