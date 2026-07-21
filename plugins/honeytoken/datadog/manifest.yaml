@@ -1,0 +1,28 @@
+name: datadog
+kind: honeytoken
+display_name: "Datadog"
+version: "0.1.0"
+author: thumper-core
+description: >
+  Create Datadog API keys as honeytokens and monitor the audit trail
+  for unauthorized usage.
+
+config_schema:
+  - key: api_key
+    label: "Admin API Key"
+    type: secret
+    required: true
+    help: "A Datadog API key with admin permissions to create/delete keys."
+
+  - key: app_key
+    label: "Application Key"
+    type: secret
+    required: true
+    help: "A Datadog application key with admin scope."
+
+  - key: site
+    label: "Datadog Site"
+    type: string
+    required: true
+    placeholder: "datadoghq.com"
+    help: "Your Datadog site (e.g. datadoghq.com, datadoghq.eu, us5.datadoghq.com)."
