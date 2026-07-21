@@ -1,0 +1,13 @@
+name: "Zoom JWT Token"
+slug: zoom
+category: Collaboration
+format:
+  prefix: ""
+  length: 32
+  charset: alphanumeric
+suggested_paths:
+  - "production/zoom/jwt_token"
+  - "services/collaboration/zoom_secret"
+metadata:
+  created_by: terraform
+  environment: production

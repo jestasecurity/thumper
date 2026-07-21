@@ -1,0 +1,13 @@
+name: "PagerDuty API Key"
+slug: pagerduty
+category: "R&D"
+format:
+  prefix: ""
+  length: 20
+  charset: alphanumeric
+suggested_paths:
+  - "production/pagerduty/api_key"
+  - "services/oncall/pagerduty_key"
+metadata:
+  created_by: terraform
+  environment: production

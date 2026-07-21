@@ -1,0 +1,13 @@
+name: "Terraform Cloud Token"
+slug: terraform
+category: "Cloud"
+format:
+  prefix: ""
+  length: 14
+  charset: alphanumeric
+suggested_paths:
+  - "production/terraform/api_token"
+  - "services/infra/terraform_token"
+metadata:
+  created_by: terraform
+  environment: production

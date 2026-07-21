@@ -1,0 +1,13 @@
+name: "Confluence API Token"
+slug: confluence
+category: "Project Management"
+format:
+  prefix: ""
+  length: 24
+  charset: alphanumeric
+suggested_paths:
+  - "production/confluence/api_token"
+  - "services/pm/confluence_token"
+metadata:
+  created_by: terraform
+  environment: production

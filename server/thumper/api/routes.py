@@ -52,6 +52,7 @@ from ..services.secrets_crypto import ConfigDecryptError, unpack_config
 from ..services.signing import verify
 from ..services.ssrf import SsrfError, assert_config_urls_allowed
 from ..tokens import TOKEN_TYPES
+from .vault_routes import vault_router
 
 log = logging.getLogger("thumper.api")
 
@@ -88,6 +89,10 @@ def require_admin(authorization: str = Header(default="")):
 # token - a route is public ONLY by explicitly opting onto agent_router.
 router = APIRouter(prefix="/api", dependencies=[Depends(require_admin)])
 agent_router = APIRouter(prefix="/api")
+
+# Secrets-manager (vault) endpoints live in their own module; mount them under
+# the admin-gated management router so every /api/vault/... path is admin-gated.
+router.include_router(vault_router)
 
 
 def _validate_bait_path(path: str) -> str:
