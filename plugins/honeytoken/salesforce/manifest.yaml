@@ -1,0 +1,35 @@
+name: salesforce
+kind: honeytoken
+display_name: "Salesforce"
+version: "0.2.0"
+author: thumper-core
+description: >
+  Create Salesforce Connected Apps as honeytokens and monitor OAuth token
+  usage and login history for unauthorized access. Authenticates via
+  OAuth 2.0 JWT Bearer flow.
+
+config_schema:
+  - key: instance_url
+    label: "Instance URL"
+    type: string
+    required: true
+    placeholder: "https://myorg.my.salesforce.com"
+    help: "Your Salesforce instance URL (e.g. https://myorg.my.salesforce.com)."
+
+  - key: consumer_key
+    label: "Connected App Consumer Key"
+    type: string
+    required: true
+    help: "Consumer Key (Client ID) from your Connected App in Salesforce."
+
+  - key: username
+    label: "Admin Username"
+    type: string
+    required: true
+    help: "Salesforce admin user authorized in the Connected App."
+
+  - key: private_key
+    label: "Private Key (PEM)"
+    type: secret
+    required: true
+    help: "RSA private key in PEM format used to sign the JWT assertion."
