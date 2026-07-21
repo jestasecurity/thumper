@@ -1,5 +1,3 @@
-import json
-
 import pytest
 import yaml
 
@@ -159,3 +157,32 @@ def test_delete_canary_secret(client_db, vault_plugin_dir):
     resp = tc.delete(f"/api/vault/secrets/{csid}")
     assert resp.status_code == 200
     assert tc.get("/api/vault/secrets").json() == []
+
+
+def test_access_logs_404_for_unknown_secret(client_db):
+    tc, db = client_db
+    assert tc.get("/api/vault/secrets/cs_nope/access-logs").status_code == 404
+
+
+def test_access_logs_lists_recorded_reads(client_db, vault_plugin_dir):
+    tc, db = client_db
+    create = tc.post("/api/vault/connections", json={
+        "name": "Test", "plugin": "hashicorp",
+        "config": {"url": "http://vault:8200", "secret_id": "s"}})
+    vid = create.json()["id"]
+    store.set_vault_connection_test(db, vid=vid, configured=True)
+    csid = tc.post("/api/vault/secrets", json={
+        "vault_connection_id": vid, "template": "stripe",
+        "path": "production/stripe/key"}).json()["id"]
+
+    # A read recorded by the poller must surface through the endpoint.
+    store.record_canary_access(db, csid=csid, event_id="evt-1",
+                               accessor="attacker", source_ip="10.0.0.5",
+                               timestamp="2026-07-21T10:00:00Z")
+    resp = tc.get(f"/api/vault/secrets/{csid}/access-logs")
+    assert resp.status_code == 200
+    logs = resp.json()
+    assert len(logs) == 1
+    assert logs[0]["accessor"] == "attacker"
+    assert logs[0]["source_ip"] == "10.0.0.5"
+    assert logs[0]["event_id"] == "evt-1"
