@@ -643,6 +643,12 @@ WATCH_STARTED=""
 process_start_fingerprint() {  # stable for one PID lifetime; empty if gone
     # BSD `lstart` is second-resolution, so include the full command as an
     # additional identity dimension while keeping this agent shell-only.
+    # NOTE: our workers are backgrounded shell FUNCTIONS (serve_fifo/atime_poll),
+    # so `command=` is the agent's own argv for every one of them - it hardens the
+    # fingerprint against a foreign process that reused the PID, but does NOT tell
+    # two same-second siblings of THIS agent apart. The `_ww_owner = MAIN_PID`
+    # gate in cleanup_watcher_workers is what bounds a kill to this agent's own
+    # workers; the fingerprint only guards against acting on a reused PID.
     ps -o lstart=,command= -p "$1" 2>/dev/null |
         sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
