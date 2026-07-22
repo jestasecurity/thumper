@@ -153,6 +153,63 @@ def test_mixed_sensors_plant_and_fire_together(server, tmp_path):
         agent.wait(timeout=5)
 
 
+def test_mixed_watcher_restarts_a_dead_atime_child(server, tmp_path):
+    """The mixed supervisor must recover if only its atime child dies (#99)."""
+    fifo = tmp_path / "credentials"
+    atin = tmp_path / "config"
+    Stub.deployments = [
+        ("dep_fifo", str(fifo), "fifo"),
+        ("dep_atime", str(atin), "atime"),
+    ]
+    agent = _spawn(server, tmp_path)
+
+    def process_tree():
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True
+        )
+        rows = []
+        for line in result.stdout.splitlines():
+            fields = line.strip().split(None, 2)
+            if len(fields) == 3:
+                rows.append((int(fields[0]), int(fields[1]), fields[2]))
+        return rows
+
+    def atime_child():
+        rows = process_tree()
+        children = {}
+        for pid, ppid, command in rows:
+            children.setdefault(ppid, []).append((pid, command))
+        main_children = children.get(agent.pid, [])
+        if len(main_children) != 1:
+            return None
+        watcher = main_children[0][0]
+        # POSIX sh does not expose a portable background-job registry. The atime
+        # child is identifiable by its current `sleep $POLL`; the FIFO writer is
+        # blocked in open() and the supervisor's own sleep is a direct child.
+        return next(
+            (pid for pid, _ in children.get(watcher, [])
+             if any(command.strip() == "sleep 1"
+                    for _, command in children.get(pid, []))),
+            None,
+        )
+
+    try:
+        assert _wait(lambda: fifo.exists() and atin.exists()), "baits not planted"
+        assert _wait(lambda: atime_child() is not None), "atime child not found"
+        dead_pid = atime_child()
+        os.kill(dead_pid, 9)
+        assert _wait(lambda: atime_child() not in (None, dead_pid)), \
+            "mixed supervisor did not replace the dead atime child"
+
+        Stub.callbacks = []
+        os.utime(atin, (time.time(), os.stat(atin).st_mtime))
+        assert _wait(lambda: _fired("/cb/dep_atime")), \
+            "replacement atime child did not detect a read"
+    finally:
+        agent.terminate()
+        agent.wait(timeout=5)
+
+
 def test_explicit_sensor_overrides_server_per_deployment(server, tmp_path):
     # Roee #164 F2: an operator's explicit --sensor atime is an intentional opt-out
     # of FIFOs; it MUST win over the server's sensor=fifo, so the bait is planted as
