@@ -8,6 +8,7 @@ import type {
 import { api } from "../api";
 import { TimeAgo, Topbar } from "../components/ui.tsx";
 import PageTitle from "../components/PageTitle.tsx";
+import ProviderLogo from "../components/ProviderLogo.tsx";
 
 const PAGE_TITLE = "Third Party SaaS";
 
@@ -100,7 +101,9 @@ export default function HoneytokenConnections() {
               const res = results[c.id];
               return (
                 <div className="integration-row" key={c.id}>
-                  <div>
+                  <div className="row" style={{ gap: 12, alignItems: "flex-start" }}>
+                    <ProviderLogo plugin={c.plugin} label={m?.display_name ?? c.plugin} />
+                    <div>
                     <div className="row" style={{ gap: 8 }}>
                       <strong>{c.name}</strong>
                       {c.configured ? (
@@ -121,6 +124,7 @@ export default function HoneytokenConnections() {
                         {res.ok ? "✓ Connected" : `✗ ${res.error}`}
                       </div>
                     )}
+                    </div>
                   </div>
                   <div className="row" style={{ gap: 8 }}>
                     <button className="btn" disabled={testing[c.id]} onClick={() => test(c.id)}>
@@ -209,7 +213,10 @@ function ConnectionModal({
     <div className="modal-backdrop" onClick={onClose}>
       <div className="card modal-card" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
         <div className="card-head">
-          <h2>{current ? "Edit" : "Add"} platform</h2>
+          <div className="row" style={{ gap: 10 }}>
+            {plugin && <ProviderLogo plugin={plugin} label={manifest?.display_name} size={24} />}
+            <h2>{current ? "Edit" : "Add"} platform</h2>
+          </div>
           <span className="type-tag">honeytoken</span>
         </div>
 
