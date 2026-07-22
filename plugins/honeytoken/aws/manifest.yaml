@@ -1,0 +1,30 @@
+name: aws
+kind: honeytoken
+display_name: "AWS"
+version: "0.3.0"
+author: thumper-core
+description: >
+  Create AWS IAM access keys as honeytokens and monitor
+  CloudTrail for unauthorized usage.
+
+config_schema:
+  - key: access_key_id
+    label: "Access Key ID"
+    type: string
+    required: true
+    placeholder: "AKIA..."
+    help: "AWS access key ID with IAM and CloudTrail permissions."
+
+  - key: secret_access_key
+    label: "Secret Access Key"
+    type: secret
+    required: true
+    placeholder: ""
+    help: "Corresponding secret access key."
+
+  - key: region
+    label: "AWS Region"
+    type: string
+    required: true
+    placeholder: "us-east-1"
+    help: "Region for CloudTrail API calls."
