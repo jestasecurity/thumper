@@ -119,7 +119,7 @@ export interface ConfigField {
   generate?: boolean; // offer a "Generate" button (e.g. a signing secret you create yourself)
 }
 
-export type PluginKind = "deploy" | "alert";
+export type PluginKind = "deploy" | "alert" | "honeytoken";
 
 export interface PluginManifest {
   name: string;
@@ -145,6 +145,46 @@ export interface IntegrationTestResult {
   ok: boolean;
   error: string | null;
   tested_at: string;
+}
+
+// ── Honeytokens (third-party SaaS canaries) ──────────────────────────────────
+export type HoneytokenState = "pending" | "active" | "failed" | "triggered";
+
+export interface HoneytokenConnection {
+  id: string;
+  name: string;
+  plugin: string;
+  configured: boolean;
+  config: Record<string, string | boolean>;
+  last_poll_at?: string | null;
+  created_at: string;
+}
+
+export interface HoneytokenConnectionTestResult {
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface Honeytoken {
+  id: string;
+  connection_id: string;
+  connection_name: string;
+  name: string;
+  token_id: string;
+  token_type: string;
+  state: HoneytokenState;
+  created_at: string;
+  last_used_at?: string | null;
+  metadata?: Record<string, string>;
+}
+
+export interface HoneytokenUsageLog {
+  id: string;
+  event_id: string | null;
+  actor: string | null;
+  source_ip: string | null;
+  action: string | null;
+  timestamp: string;
 }
 
 export interface VersionInfo {

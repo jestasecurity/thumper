@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import {
+  Cloud,
   Crosshair,
   LayoutDashboard,
   MonitorDot,
@@ -16,6 +17,8 @@ import CreateTripwire from "./pages/CreateTripwire.tsx";
 import Endpoints from "./pages/Endpoints.tsx";
 import EndpointDetail from "./pages/EndpointDetail.tsx";
 import Integrations from "./pages/Integrations.tsx";
+import HoneytokenConnections from "./pages/HoneytokenConnections.tsx";
+import Honeytokens from "./pages/Honeytokens.tsx";
 import Settings from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AdminGate from "./AdminGate.tsx";
@@ -89,6 +92,10 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           <span className="nav-icon"><MonitorDot size={18} /></span>{" "}
           <span className="nav-label">Endpoints</span>
         </NavLink>
+        <NavLink to="/third-party" className={linkClass} title="Third Party SaaS">
+          <span className="nav-icon"><Cloud size={18} /></span>{" "}
+          <span className="nav-label">Third Party SaaS</span>
+        </NavLink>
         <NavLink to="/integrations" className={linkClass} title="Integrations">
           <span className="nav-icon"><Plug size={18} /></span>{" "}
           <span className="nav-label">Integrations</span>
@@ -121,6 +128,8 @@ export default function App() {
           <Route path="/tripwires/:id" element={<TripwireDetail />} />
           <Route path="/endpoints" element={<Endpoints />} />
           <Route path="/endpoints/:id" element={<EndpointDetail />} />
+          <Route path="/third-party" element={<HoneytokenConnections />} />
+          <Route path="/third-party/tokens" element={<Honeytokens />} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />

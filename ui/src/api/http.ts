@@ -8,6 +8,10 @@ import type {
   Deployment,
   Endpoint,
   EndpointDetail,
+  Honeytoken,
+  HoneytokenConnection,
+  HoneytokenConnectionTestResult,
+  HoneytokenUsageLog,
   InstallCommand,
   Integration,
   IntegrationTestResult,
@@ -121,6 +125,33 @@ export const httpApi = {
     }),
   resolveAllAlerts: () =>
     req<{ resolved: number }>("/alerts/resolve-all", { method: "POST" }),
+
+  // Honeytokens (third-party SaaS canaries)
+  listHoneytokenConnections: () => req<HoneytokenConnection[]>("/honeytokens/connections"),
+  createHoneytokenConnection: (input: {
+    name: string;
+    plugin: string;
+    config: Record<string, string | boolean>;
+  }) => req<HoneytokenConnection>("/honeytokens/connections",
+    { method: "POST", body: JSON.stringify(input) }),
+  updateHoneytokenConnection: (id: string, input: {
+    name: string;
+    config: Record<string, string | boolean>;
+  }) => req<HoneytokenConnection>(`/honeytokens/connections/${id}`,
+    { method: "PUT", body: JSON.stringify(input) }),
+  deleteHoneytokenConnection: (id: string) =>
+    req<{ status: string }>(`/honeytokens/connections/${id}`, { method: "DELETE" }),
+  testHoneytokenConnection: (id: string) =>
+    req<HoneytokenConnectionTestResult>(`/honeytokens/connections/${id}/test`,
+      { method: "POST" }),
+
+  listHoneytokens: () => req<Honeytoken[]>("/honeytokens/tokens"),
+  createHoneytoken: (input: { connection_id: string; name: string }) =>
+    req<Honeytoken>("/honeytokens/tokens", { method: "POST", body: JSON.stringify(input) }),
+  deleteHoneytoken: (id: string) =>
+    req<{ status: string }>(`/honeytokens/tokens/${id}`, { method: "DELETE" }),
+  listHoneytokenUsage: (id: string) =>
+    req<HoneytokenUsageLog[]>(`/honeytokens/tokens/${id}/usage`),
 
   // Plugins / integrations
   listManifests: () => req<PluginManifest[]>("/manifests"),
