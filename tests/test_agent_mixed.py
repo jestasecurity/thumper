@@ -16,6 +16,8 @@ import platform as _platform
 from pathlib import Path
 import pytest
 
+from agent_ready import wait_ready
+
 pytestmark = pytest.mark.skipif(
     _platform.system() != "Darwin", reason="pair includes a FIFO bait (macOS)"
 )
@@ -137,11 +139,13 @@ def test_mixed_sensors_plant_and_fire_together(server, tmp_path):
         assert _wait(lambda: fifo.exists() and stat.S_ISFIFO(fifo.stat().st_mode)), (
             "fifo-sensor bait was not planted as a named pipe"
         )
-        assert _wait(
-            lambda: (
-                atin.exists() and atin.is_file() and atin.stat().st_atime < ARMED_MAX
-            )
-        ), "atime-sensor bait was not planted as an armed regular file"
+        assert _wait(lambda: atin.exists() and atin.is_file()), (
+            "atime-sensor bait was not planted as a regular file"
+        )
+        # Wait for steady state - FIFO writers up AND the atime baseline captured -
+        # before simulating reads, so the atime bump can't race the baseline (#237).
+        assert wait_ready(tmp_path), "agent did not reach steady state"
+        assert atin.stat().st_atime < ARMED_MAX, "atime bait was not armed"
         # read the FIFO bait (blocks until the agent serves it) -> fires with pid
         threading.Thread(target=lambda: open(fifo).read(), daemon=True).start()
         # 'read' the atime bait -> fires (detection)

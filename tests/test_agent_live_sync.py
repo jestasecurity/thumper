@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_ready import wait_ready
+
 AGENT = Path(__file__).resolve().parents[1] / "agent" / "thumper_agent.sh"
 BAIT_BODY = "BAIT-honeytoken-content"
 REAL_SECRET = "REAL-SECRET-DO-NOT-DELETE"
@@ -136,7 +138,8 @@ def agent(tmp_path):
     _StubHandler.fail_content = set()
     try:
         yield {"set": set_deployments, "start": start, "reset_token": reset_token,
-               "keep": keep, "drop": drop, "add": add}
+               "keep": keep, "drop": drop, "add": add,
+               "state_dir": str(tmp_path / "state")}
     finally:
         for p in procs:
             _term_group(p)
@@ -166,6 +169,9 @@ def test_live_sync_plants_added_and_removes_dropped(agent):
     # Both initial baits planted.
     assert _wait_until(lambda: Path(keep).exists() and Path(drop).exists()), \
         "initial bait not planted"
+    # Wait for the first watcher to reach steady state before perturbing the set,
+    # so the reconcile isn't racing the agent's initial startup (#237).
+    assert wait_ready(agent["state_dir"]), "agent did not reach steady state"
 
     # Server set changes: drop -> add (keep stays).
     agent["set"]([{"id": "dep_keep", "path": keep}, {"id": "dep_add", "path": add}])
