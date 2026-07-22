@@ -147,6 +147,12 @@ def test_atime_sensor_is_rearmable(server, tmp_path):
         assert _wait(lambda: bait.exists() and _atime(bait) < ARMED_MAX), (
             "bait not planted+armed"
         )
+        # Let the INITIAL arm+baseline settle before read #1 - same two-step race as
+        # the re-arm settle below. atime_poll arms then reads the baseline, and the
+        # "armed" gate above trips on the arm; a read landing before the baseline read
+        # is captured AS the baseline and missed. A real reader hits a steady-state
+        # agent, not this startup window (closed a ~8% macOS flake).
+        time.sleep(2)
         # simulate read #1: bump atime forward (what a real read does under relatime)
         os.utime(bait, (time.time(), os.stat(bait).st_mtime))
         assert _wait(lambda: _atime_hits() >= 1), "read #1 was not detected"
