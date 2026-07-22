@@ -20,7 +20,7 @@ dependencies = [
 # only curl + openssl - it has no Python dependencies of its own.
 postgres = ["psycopg[binary]>=3.3.4"]
 mysql = ["pymysql>=1.2.0"]
-dev = ["pytest>=9.1.1", "ruff>=0.15.21"]
+dev = ["pytest>=9.1.1", "ruff>=0.15.22"]
 
 [tool.pytest.ini_options]
 # Tests import `thumper`, which lives under server/. Put it on the path here so
