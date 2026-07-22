@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Third-party SaaS honeytokens: create fake credentials inside Datadog,
+  Salesforce, and AWS via their APIs, and detect use by polling each platform's
+  audit log — a new "Third Party SaaS" dashboard section (Connections +
+  Honeytokens tabs), a background usage poller, and the `honeytoken` plugin kind.
 - Docker registry credentials honeytoken type for `~/.docker/config.json`.
 - Added absolute local-time tooltips to relative timestamps in the dashboard UI.
 
