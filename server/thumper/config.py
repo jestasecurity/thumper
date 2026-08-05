@@ -52,6 +52,10 @@ ALLOWED_ORIGINS = [o.strip() for o in os.environ.get(
 # the plugin *framework* - base classes + loader).
 PLUGINS_DIR = Path(os.environ.get("THUMPER_PLUGINS_DIR", str(REPO_ROOT / "plugins")))
 
+# Seconds between vault-audit poll cycles (the background poller that checks each
+# configured secrets manager for canary reads). Kept short so a read fires fast.
+VAULT_POLL_INTERVAL = int(os.environ.get("THUMPER_VAULT_POLL_INTERVAL", "30"))
+
 # Database URL (SQLAlchemy format). A bare filesystem path is mapped to SQLite.
 _db_raw = os.environ.get("THUMPER_DB", str(REPO_ROOT / "thumper.db"))
 DB_URL = _db_raw if "://" in _db_raw else f"sqlite:///{_db_raw}"

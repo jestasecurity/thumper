@@ -156,6 +156,29 @@ class CanarySecret(Base):
     )
 
 
+class CanaryAccessLog(Base):
+    """One recorded read of a canary secret, seen in the manager's audit log.
+    `event_id` is the manager's own event identifier (when it exposes one); it
+    plus the secret id form a uniqueness key so re-polling the same audit window
+    never double-records or double-alerts a single read."""
+    __tablename__ = "canary_access_logs"
+    id = Column(String(255), primary_key=True)
+    canary_secret_id = Column(
+        String(255),
+        ForeignKey("canary_secrets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_id = Column(String(255))
+    accessor = Column(String(255))
+    source_ip = Column(String(255))
+    timestamp = Column(String(255), nullable=False)
+    created_at = Column(String(255), nullable=False)
+    __table_args__ = (
+        Index("ix_access_log_secret", "canary_secret_id"),
+        UniqueConstraint("canary_secret_id", "event_id", name="uq_access_event"),
+    )
+
+
 # ── engine + session ────────────────────────────────────────────────────────
 # Created lazily on first use rather than at import time, so a THUMPER_DB / dotenv
 # override applied after this module is imported (CLI, tests) still takes effect.

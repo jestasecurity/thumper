@@ -182,3 +182,20 @@ def delete_secret(csid: str, db: Session = Depends(get_db)):
                 log.warning("Failed to delete secret %s from vault", cs.path)
     store.delete_canary_secret(db, csid)
     return {"status": "ok"}
+
+
+@vault_router.get("/secrets/{csid}/access-logs")
+def list_access_logs(csid: str, db: Session = Depends(get_db)):
+    cs = store.get_canary_secret(db, csid)
+    if cs is None:
+        raise HTTPException(404, "Canary secret not found")
+    return [
+        {
+            "id": entry.id,
+            "event_id": entry.event_id,
+            "accessor": entry.accessor,
+            "source_ip": entry.source_ip,
+            "timestamp": entry.timestamp,
+        }
+        for entry in store.list_canary_access_logs(db, csid)
+    ]
