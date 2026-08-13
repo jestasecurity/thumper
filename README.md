@@ -12,7 +12,7 @@
   The tokens authenticate to nothing. A <b><em>read</em></b> is the signal.
   </p>
   <p align="center">
-  <a href="https://jesta.ai/thumper">Website</a>
+  <a href="https://jesta.ai">Website</a>
   &nbsp;·&nbsp;
   <a href="https://docs.jesta.ai"><strong>Docs</strong></a>
   &nbsp;·&nbsp;
