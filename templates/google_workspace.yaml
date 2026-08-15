@@ -1,0 +1,13 @@
+name: "Google Workspace API Key"
+slug: google_workspace
+category: Collaboration
+format:
+  prefix: ""
+  length: 39
+  charset: alphanumeric_special
+suggested_paths:
+  - "production/google_workspace/api_key"
+  - "services/collaboration/google_key"
+metadata:
+  created_by: terraform
+  environment: production

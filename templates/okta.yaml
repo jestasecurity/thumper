@@ -1,0 +1,13 @@
+name: "Okta API Token"
+slug: okta
+category: "Identity"
+format:
+  prefix: "00"
+  length: 42
+  charset: alphanumeric
+suggested_paths:
+  - "production/okta/api_token"
+  - "services/identity/okta_secret"
+metadata:
+  created_by: terraform
+  environment: production

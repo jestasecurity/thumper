@@ -1,0 +1,13 @@
+name: "Twilio Auth Token"
+slug: twilio
+category: Marketing
+format:
+  prefix: ""
+  length: 32
+  charset: hex
+suggested_paths:
+  - "production/twilio/auth_token"
+  - "services/communications/twilio_token"
+metadata:
+  created_by: terraform
+  environment: production

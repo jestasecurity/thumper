@@ -1,0 +1,13 @@
+name: "JumpCloud API Key"
+slug: jumpcloud
+category: "Identity"
+format:
+  prefix: ""
+  length: 40
+  charset: hex
+suggested_paths:
+  - "production/jumpcloud/api_key"
+  - "services/identity/jumpcloud_key"
+metadata:
+  created_by: terraform
+  environment: production

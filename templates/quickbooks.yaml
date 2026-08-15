@@ -1,0 +1,13 @@
+name: "QuickBooks Client Secret"
+slug: quickbooks
+category: Finance
+format:
+  prefix: ""
+  length: 32
+  charset: alphanumeric
+suggested_paths:
+  - "production/quickbooks/client_secret"
+  - "services/finance/quickbooks_secret"
+metadata:
+  created_by: terraform
+  environment: production
