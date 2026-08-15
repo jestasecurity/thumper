@@ -1,0 +1,13 @@
+name: "ADP Client Secret"
+slug: adp
+category: "HR"
+format:
+  prefix: ""
+  length: 64
+  charset: alphanumeric
+suggested_paths:
+  - "production/adp/client_secret"
+  - "services/hr/adp_secret"
+metadata:
+  created_by: terraform
+  environment: production

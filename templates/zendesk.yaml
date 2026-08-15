@@ -1,0 +1,13 @@
+name: "Zendesk API Token"
+slug: zendesk
+category: "CRM"
+format:
+  prefix: ""
+  length: 40
+  charset: alphanumeric
+suggested_paths:
+  - "production/zendesk/api_token"
+  - "services/crm/zendesk_token"
+metadata:
+  created_by: terraform
+  environment: production

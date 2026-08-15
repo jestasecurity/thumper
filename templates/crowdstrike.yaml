@@ -1,0 +1,13 @@
+name: "CrowdStrike API Secret"
+slug: crowdstrike
+category: "Identity"
+format:
+  prefix: ""
+  length: 40
+  charset: alphanumeric_special
+suggested_paths:
+  - "production/crowdstrike/api_secret"
+  - "services/identity/crowdstrike_secret"
+metadata:
+  created_by: terraform
+  environment: production

@@ -1,0 +1,13 @@
+name: "BambooHR API Key"
+slug: bamboohr
+category: "HR"
+format:
+  prefix: ""
+  length: 40
+  charset: alphanumeric
+suggested_paths:
+  - "production/bamboohr/api_key"
+  - "services/hr/bamboohr_key"
+metadata:
+  created_by: terraform
+  environment: production

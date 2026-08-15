@@ -1,0 +1,13 @@
+name: "HubSpot API Key"
+slug: hubspot
+category: "CRM"
+format:
+  prefix: ""
+  length: 36
+  charset: hex
+suggested_paths:
+  - "production/hubspot/api_key"
+  - "services/crm/hubspot_key"
+metadata:
+  created_by: terraform
+  environment: production

@@ -1,0 +1,13 @@
+name: "Stripe API Key"
+slug: stripe
+category: Finance
+format:
+  prefix: "sk_live_"
+  length: 48
+  charset: alphanumeric
+suggested_paths:
+  - "production/stripe/api_key"
+  - "services/payments/stripe_secret"
+metadata:
+  created_by: terraform
+  environment: production

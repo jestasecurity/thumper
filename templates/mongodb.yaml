@@ -1,0 +1,13 @@
+name: "MongoDB Atlas API Key"
+slug: mongodb
+category: "Cloud"
+format:
+  prefix: ""
+  length: 36
+  charset: hex
+suggested_paths:
+  - "production/mongodb/api_key"
+  - "services/data/mongodb_key"
+metadata:
+  created_by: terraform
+  environment: production

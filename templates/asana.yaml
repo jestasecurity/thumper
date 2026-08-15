@@ -1,0 +1,13 @@
+name: "Asana Personal Access Token"
+slug: asana
+category: "Project Management"
+format:
+  prefix: ""
+  length: 32
+  charset: alphanumeric
+suggested_paths:
+  - "production/asana/pat"
+  - "services/pm/asana_token"
+metadata:
+  created_by: terraform
+  environment: production

@@ -1,0 +1,13 @@
+name: "SentinelOne API Token"
+slug: sentinelone
+category: "Identity"
+format:
+  prefix: ""
+  length: 80
+  charset: alphanumeric
+suggested_paths:
+  - "production/sentinelone/api_token"
+  - "services/identity/sentinelone_token"
+metadata:
+  created_by: terraform
+  environment: production

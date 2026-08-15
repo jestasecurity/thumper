@@ -1,0 +1,13 @@
+name: "Plaid Secret Key"
+slug: plaid
+category: Finance
+format:
+  prefix: ""
+  length: 30
+  charset: alphanumeric
+suggested_paths:
+  - "production/plaid/secret_key"
+  - "services/finance/plaid_secret"
+metadata:
+  created_by: terraform
+  environment: production

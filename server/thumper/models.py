@@ -181,3 +181,43 @@ class TokenPreviewOut(BaseModel):
 # Agent-facing endpoints (/enroll, /agent/*, /trigger) speak a plain-text
 # protocol (key=value / tab-separated), not JSON, so the Bash agent needs no
 # JSON parser - see api/routes.py. They therefore have no Pydantic schemas here.
+
+
+# ── vault (secrets-manager) connections & canary secrets ─────────────────────
+class CreateVaultConnectionIn(BaseModel):
+    name: str
+    plugin: str
+    config: dict
+
+
+class UpdateVaultConnectionIn(BaseModel):
+    name: str
+    config: dict
+
+
+class VaultConnectionOut(BaseModel):
+    id: str
+    name: str
+    plugin: str
+    configured: bool
+    config: dict
+    last_poll_at: Optional[str] = None
+    created_at: str
+
+
+class CreateCanarySecretIn(BaseModel):
+    vault_connection_id: str
+    template: str
+    path: str
+
+
+class CanarySecretOut(BaseModel):
+    id: str
+    vault_connection_id: str
+    vault_connection_name: str
+    template: str
+    template_name: str
+    path: str
+    state: str
+    created_at: str
+    last_accessed_at: Optional[str] = None

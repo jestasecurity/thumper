@@ -1,0 +1,43 @@
+name: hashicorp
+kind: vault
+display_name: "HashiCorp Vault"
+version: "0.1.0"
+author: thumper-core
+description: >
+  Connect to a HashiCorp Vault instance to plant and monitor canary secrets.
+  Uses AppRole authentication and polls the audit log for secret read events.
+
+config_schema:
+  - key: url
+    label: "Vault URL"
+    type: string
+    required: true
+    placeholder: "https://vault.example.com:8200"
+    help: "The base URL of your Vault server."
+
+  - key: mount
+    label: "KV mount path"
+    type: string
+    required: true
+    placeholder: "secret"
+    help: "The KV v2 secrets engine mount path."
+
+  - key: role_id
+    label: "AppRole Role ID"
+    type: string
+    required: true
+    placeholder: ""
+    help: "The role_id for AppRole authentication."
+
+  - key: secret_id
+    label: "AppRole Secret ID"
+    type: secret
+    required: true
+    help: "The secret_id for AppRole authentication."
+
+  - key: namespace
+    label: "Namespace"
+    type: string
+    required: false
+    placeholder: ""
+    help: "Vault namespace (Enterprise only). Leave blank for OSS Vault."

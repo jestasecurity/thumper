@@ -1,0 +1,13 @@
+name: "DocuSign Integration Key"
+slug: docusign
+category: Legal
+format:
+  prefix: ""
+  length: 36
+  charset: hex
+suggested_paths:
+  - "production/docusign/integration_key"
+  - "services/legal/docusign_key"
+metadata:
+  created_by: terraform
+  environment: production

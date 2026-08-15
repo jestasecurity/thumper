@@ -1,0 +1,13 @@
+name: "Workday API Client Secret"
+slug: workday
+category: "HR"
+format:
+  prefix: ""
+  length: 64
+  charset: alphanumeric
+suggested_paths:
+  - "production/workday/client_secret"
+  - "services/hr/workday_secret"
+metadata:
+  created_by: terraform
+  environment: production

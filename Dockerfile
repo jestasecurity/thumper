@@ -13,6 +13,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY server/ ./server/
 COPY plugins/ ./plugins/
+COPY templates/ ./templates/
 COPY agent/ ./agent/
 RUN pip install --no-cache-dir ".[postgres,mysql]"
 
