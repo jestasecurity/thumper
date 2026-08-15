@@ -2,6 +2,7 @@
 the app deals in ORM model instances (attribute access: row.id, row.name, …).
 """
 import hmac
+import json
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,7 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import (
-    Alert, Deployment, DeliveryAttempt, Endpoint, Integration, Tripwire,
+    Alert, Deployment, DeliveryAttempt, Endpoint, Honeytoken,
+    HoneytokenConnection, HoneytokenUsageLog, Integration, Tripwire,
 )
 from .models import iso_now
 from .services.secrets_crypto import pack_config
@@ -432,3 +434,154 @@ def set_integration_test_result(db: Session, *, plugin: str, status: str,
         row.last_test_at = iso_now()
         row.last_test_error = error
         db.commit()
+
+
+# ── honeytoken connections ───────────────────────────────────────────────────
+def create_honeytoken_connection(db: Session, *, name: str, plugin: str,
+                                 config: dict) -> HoneytokenConnection:
+    row = HoneytokenConnection(id=_id("htc"), name=name, plugin=plugin,
+                               config_json=json.dumps(config), configured=False,
+                               created_at=iso_now())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_honeytoken_connections(db: Session) -> list[HoneytokenConnection]:
+    return db.query(HoneytokenConnection).order_by(
+        HoneytokenConnection.created_at.desc()).all()
+
+
+def get_honeytoken_connection(db: Session, hid: str) -> Optional[HoneytokenConnection]:
+    return db.query(HoneytokenConnection).filter(
+        HoneytokenConnection.id == hid).first()
+
+
+def update_honeytoken_connection(db: Session, hid: str, *, name: str,
+                                 config: dict) -> Optional[HoneytokenConnection]:
+    row = get_honeytoken_connection(db, hid)
+    if row is None:
+        return None
+    row.name = name
+    row.config_json = json.dumps(config)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_honeytoken_connection(db: Session, hid: str) -> bool:
+    row = get_honeytoken_connection(db, hid)
+    if row is None:
+        return False
+    # SQLite doesn't enforce ON DELETE CASCADE unless the FK pragma is on, so
+    # remove the children explicitly (their usage logs cascade off the tokens).
+    for ht in db.query(Honeytoken).filter(Honeytoken.connection_id == hid).all():
+        db.query(HoneytokenUsageLog).filter(
+            HoneytokenUsageLog.honeytoken_id == ht.id).delete()
+        db.delete(ht)
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def set_honeytoken_connection_test(db: Session, *, hid: str,
+                                   configured: bool) -> None:
+    row = get_honeytoken_connection(db, hid)
+    if row:
+        row.configured = configured
+        db.commit()
+
+
+def update_honeytoken_last_poll(db: Session, hid: str) -> None:
+    db.query(HoneytokenConnection).filter(
+        HoneytokenConnection.id == hid).update(
+        {HoneytokenConnection.last_poll_at: iso_now()})
+    db.commit()
+
+
+# ── honeytokens ──────────────────────────────────────────────────────────────
+def create_honeytoken(db: Session, *, connection_id: str, name: str,
+                      token_id: str, token_type: str,
+                      metadata: dict) -> Honeytoken:
+    row = Honeytoken(id=_id("ht"), connection_id=connection_id, name=name,
+                     token_id=token_id, token_type=token_type,
+                     metadata_json=json.dumps(metadata), state="pending",
+                     created_at=iso_now())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_honeytokens(db: Session) -> list[Honeytoken]:
+    return db.query(Honeytoken).order_by(Honeytoken.created_at.desc()).all()
+
+
+def get_honeytoken(db: Session, htid: str) -> Optional[Honeytoken]:
+    return db.query(Honeytoken).filter(Honeytoken.id == htid).first()
+
+
+def list_honeytokens_for_connection(db: Session, hid: str) -> list[Honeytoken]:
+    return db.query(Honeytoken).filter(Honeytoken.connection_id == hid).all()
+
+
+def list_active_honeytokens_for_connection(db: Session,
+                                           hid: str) -> list[Honeytoken]:
+    return db.query(Honeytoken).filter(
+        Honeytoken.connection_id == hid,
+        Honeytoken.state.in_(["active", "triggered"])).all()
+
+
+def set_honeytoken_state(db: Session, htid: str, state: str) -> None:
+    db.query(Honeytoken).filter(Honeytoken.id == htid).update(
+        {Honeytoken.state: state})
+    db.commit()
+
+
+def mark_honeytoken_used(db: Session, htid: str) -> None:
+    db.query(Honeytoken).filter(Honeytoken.id == htid).update(
+        {Honeytoken.last_used_at: iso_now(), Honeytoken.state: "triggered"})
+    db.commit()
+
+
+def delete_honeytoken(db: Session, htid: str) -> bool:
+    row = get_honeytoken(db, htid)
+    if row is None:
+        return False
+    db.query(HoneytokenUsageLog).filter(
+        HoneytokenUsageLog.honeytoken_id == htid).delete()
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def record_honeytoken_usage(db: Session, htid: str, event_id: Optional[str],
+                            actor: Optional[str], source_ip: Optional[str],
+                            action: Optional[str],
+                            timestamp: str) -> Optional[HoneytokenUsageLog]:
+    """Record one use of a honeytoken. Returns None (recording nothing) when
+    `event_id` is set and already logged for this token, so a re-poll of the
+    same audit window neither double-records nor re-alerts a single use."""
+    if event_id:
+        existing = db.query(HoneytokenUsageLog).filter(
+            HoneytokenUsageLog.honeytoken_id == htid,
+            HoneytokenUsageLog.event_id == event_id,
+        ).first()
+        if existing:
+            return None
+    row = HoneytokenUsageLog(
+        id=_id("hul"), honeytoken_id=htid, event_id=event_id, actor=actor,
+        source_ip=source_ip, action=action, timestamp=timestamp,
+        created_at=iso_now(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_honeytoken_usage_logs(db: Session, htid: str) -> list[HoneytokenUsageLog]:
+    return db.query(HoneytokenUsageLog).filter(
+        HoneytokenUsageLog.honeytoken_id == htid,
+    ).order_by(HoneytokenUsageLog.timestamp.desc()).all()

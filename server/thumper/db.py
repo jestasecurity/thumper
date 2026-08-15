@@ -119,6 +119,65 @@ class DeliveryAttempt(Base):
     )
 
 
+class HoneytokenConnection(Base):
+    """A connection to a third-party SaaS platform (Datadog, Salesforce, AWS)
+    in which honeytokens are created and whose audit log is polled for use."""
+    __tablename__ = "honeytoken_connections"
+    id = Column(String(255), primary_key=True)
+    name = Column(String(255), nullable=False)
+    plugin = Column(String(255), nullable=False)
+    config_json = Column(Text, nullable=False, default="{}")
+    configured = Column(Boolean, nullable=False, default=False)
+    last_poll_at = Column(String(255))
+    created_at = Column(String(255), nullable=False)
+
+
+class Honeytoken(Base):
+    """A fake credential created on a SaaS platform via a HoneytokenConnection.
+    `state`: pending -> active -> triggered. `token_id`/`token_type` are the
+    platform's identifiers; a use of it (seen in the audit log) fires."""
+    __tablename__ = "honeytokens"
+    id = Column(String(255), primary_key=True)
+    connection_id = Column(
+        String(255),
+        ForeignKey("honeytoken_connections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name = Column(String(255), nullable=False)
+    token_id = Column(String(255), nullable=False)
+    token_type = Column(String(255), nullable=False)
+    metadata_json = Column(Text, nullable=False, default="{}")
+    state = Column(String(255), nullable=False, default="pending")
+    created_at = Column(String(255), nullable=False)
+    last_used_at = Column(String(255))
+    __table_args__ = (
+        Index("ix_ht_connection", "connection_id"),
+    )
+
+
+class HoneytokenUsageLog(Base):
+    """One recorded use of a honeytoken, seen in the platform's audit log.
+    `(honeytoken_id, event_id)` is unique so re-polling the same audit window
+    never double-records or double-alerts a single use."""
+    __tablename__ = "honeytoken_usage_logs"
+    id = Column(String(255), primary_key=True)
+    honeytoken_id = Column(
+        String(255),
+        ForeignKey("honeytokens.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    event_id = Column(String(255))
+    actor = Column(String(255))
+    source_ip = Column(String(255))
+    action = Column(String(255))
+    timestamp = Column(String(255), nullable=False)
+    created_at = Column(String(255), nullable=False)
+    __table_args__ = (
+        Index("ix_usage_log_honeytoken", "honeytoken_id"),
+        UniqueConstraint("honeytoken_id", "event_id", name="uq_honeytoken_usage_event"),
+    )
+
+
 # ── engine + session ────────────────────────────────────────────────────────
 # Created lazily on first use rather than at import time, so a THUMPER_DB / dotenv
 # override applied after this module is imported (CLI, tests) still takes effect.

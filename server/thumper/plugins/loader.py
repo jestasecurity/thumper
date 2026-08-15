@@ -14,7 +14,7 @@ import yaml
 
 from ..config import PLUGINS_DIR
 
-_KINDS = ("deploy", "alert")
+_KINDS = ("deploy", "alert", "honeytoken")
 
 _manifest_cache: list[dict] | None = None
 _module_cache: dict[str, object] = {}
