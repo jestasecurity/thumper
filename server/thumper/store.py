@@ -2,6 +2,7 @@
 the app deals in ORM model instances (attribute access: row.id, row.name, …).
 """
 import hmac
+import json
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,7 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import (
-    Alert, Deployment, DeliveryAttempt, Endpoint, Integration, Tripwire,
+    Alert, CanarySecret, Deployment, DeliveryAttempt, Endpoint, Integration,
+    Tripwire, VaultConnection,
 )
 from .models import iso_now
 from .services.secrets_crypto import pack_config
@@ -432,3 +434,118 @@ def set_integration_test_result(db: Session, *, plugin: str, status: str,
         row.last_test_at = iso_now()
         row.last_test_error = error
         db.commit()
+
+
+# ── vault connections (secrets-manager instances) ────────────────────────────
+def create_vault_connection(db: Session, *, name: str, plugin: str,
+                            config: dict) -> VaultConnection:
+    row = VaultConnection(id=_id("vc"), name=name, plugin=plugin,
+                          config_json=json.dumps(config), configured=False,
+                          created_at=iso_now())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_vault_connections(db: Session) -> list[VaultConnection]:
+    return db.query(VaultConnection).order_by(
+        VaultConnection.created_at.desc()).all()
+
+
+def get_vault_connection(db: Session, vid: str) -> Optional[VaultConnection]:
+    return db.query(VaultConnection).filter(VaultConnection.id == vid).first()
+
+
+def update_vault_connection(db: Session, vid: str, *, name: str,
+                            config: dict) -> Optional[VaultConnection]:
+    row = get_vault_connection(db, vid)
+    if row is None:
+        return None
+    row.name = name
+    row.config_json = json.dumps(config)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_vault_connection(db: Session, vid: str) -> bool:
+    row = get_vault_connection(db, vid)
+    if row is None:
+        return False
+    # Explicit child delete: ondelete=CASCADE is a DB-level FK action and SQLite
+    # doesn't enforce it unless PRAGMA foreign_keys=ON, so don't rely on it.
+    db.query(CanarySecret).filter(
+        CanarySecret.vault_connection_id == vid).delete()
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def set_vault_connection_test(db: Session, *, vid: str,
+                              configured: bool) -> None:
+    row = get_vault_connection(db, vid)
+    if row:
+        row.configured = configured
+        db.commit()
+
+
+def update_vault_last_poll(db: Session, vid: str) -> None:
+    db.query(VaultConnection).filter(VaultConnection.id == vid).update(
+        {VaultConnection.last_poll_at: iso_now()})
+    db.commit()
+
+
+# ── canary secrets (planted in a secrets manager) ────────────────────────────
+def create_canary_secret(db: Session, *, vault_connection_id: str,
+                         template: str, path: str, value: str) -> CanarySecret:
+    row = CanarySecret(id=_id("cs"), vault_connection_id=vault_connection_id,
+                       template=template, path=path, value=value,
+                       state="pending", created_at=iso_now())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_canary_secrets(db: Session) -> list[CanarySecret]:
+    return db.query(CanarySecret).order_by(CanarySecret.created_at.desc()).all()
+
+
+def get_canary_secret(db: Session, csid: str) -> Optional[CanarySecret]:
+    return db.query(CanarySecret).filter(CanarySecret.id == csid).first()
+
+
+def list_canary_secrets_for_connection(db: Session,
+                                       vid: str) -> list[CanarySecret]:
+    return db.query(CanarySecret).filter(
+        CanarySecret.vault_connection_id == vid).all()
+
+
+def list_planted_canary_secrets_for_connection(
+        db: Session, vid: str) -> list[CanarySecret]:
+    return db.query(CanarySecret).filter(
+        CanarySecret.vault_connection_id == vid,
+        CanarySecret.state.in_(["planted", "triggered"])).all()
+
+
+def set_canary_secret_state(db: Session, csid: str, state: str) -> None:
+    db.query(CanarySecret).filter(CanarySecret.id == csid).update(
+        {CanarySecret.state: state})
+    db.commit()
+
+
+def mark_canary_secret_accessed(db: Session, csid: str) -> None:
+    db.query(CanarySecret).filter(CanarySecret.id == csid).update(
+        {CanarySecret.last_accessed_at: iso_now(),
+         CanarySecret.state: "triggered"})
+    db.commit()
+
+
+def delete_canary_secret(db: Session, csid: str) -> bool:
+    row = get_canary_secret(db, csid)
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
