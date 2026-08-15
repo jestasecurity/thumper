@@ -15,6 +15,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Agent emits a steady-state `ready` signal (marker + `watcher ready` log) once its
+  watchers are up and atime baselines are captured, killing the startup-timing test
+  flake class; the ephemeral `ready` marker is now accurate in every mode.
 - Restarted dead endpoint sensor processes instead of leaving live-sync agents silently blind.
 - Removed stale dashboard copy that described the old macOS `fs_usage`/sudo-based tripwire sensor.
 - Rejected unknown or oversized config keys when saving an integration, instead of persisting them unvalidated.

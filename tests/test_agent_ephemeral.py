@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_ready import wait_ready
+
 AGENT = Path(__file__).resolve().parents[1] / "agent" / "thumper_agent.sh"
 BAIT_BODY = "BAIT-honeytoken-content"
 
@@ -183,7 +185,7 @@ def test_non_ephemeral_enroll_body_has_no_ephemeral_flag(stub):
     )
 
 
-def test_ephemeral_auto_decommissions_on_terminate(stub):
+def test_ephemeral_auto_decommissions_on_terminate(stub, tmp_path):
     """In watch mode, terminating an --ephemeral agent triggers self-destruct:
     it POSTs /api/agent/decommissioned before exiting."""
     proc = stub["start"](
@@ -203,6 +205,11 @@ def test_ephemeral_auto_decommissions_on_terminate(stub):
         lambda: any("/api/agent/deployments/" in p for p in _StubHandler.seen_paths),
         timeout=10,
     ), "agent never reported plant state (bait not planted yet)"
+
+    # Wait for the watcher to reach steady state before terminating, so SIGTERM
+    # can't race startup (a serve_fifo child still coming up would hold stdout open
+    # and hang the exit / drop the decommission) - #237.
+    assert wait_ready(tmp_path / "state"), "agent did not reach steady state"
 
     before = _StubHandler.decommission_count
 

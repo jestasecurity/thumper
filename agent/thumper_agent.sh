@@ -558,6 +558,7 @@ watch_inotify() {
     # silently-dark sensor looks exactly like "no one touched the bait", which is
     # the worst possible failure for a tripwire. -q already keeps normal startup
     # quiet, so only real errors reach the log here.
+    mark_ready   # inotify -m begins monitoring immediately; signal steady state
     inotifywait -m -q -e access --format '%w' -- "$@" | while read -r path; do
         idx=""
         j=1
@@ -612,6 +613,8 @@ atime_poll() {
         arm_atime "$p"                                  # arm so relatime bumps atime on a read
         eval "atime_$i=\$(read_atime \"\$p\")"
     done
+    mark_armed   # gen 1: initial baselines captured - reads are now detectable
+    mark_ready   # atime watcher is at steady state
     while true; do
         sleep "$POLL"
         # shellcheck disable=SC2086
@@ -622,6 +625,7 @@ atime_poll() {
                 fire "$i" "atime-change" "" "" "" "$p"
                 arm_atime "$p"                          # RE-ARM so the NEXT read is detectable too
                 eval "atime_$i=\$(read_atime \"\$p\")"
+                mark_armed   # gen++: this bait re-armed + re-baselined
             fi
         done
     done
@@ -636,6 +640,24 @@ watch_atime() { atime_poll "$(all_indices)"; }   # poll every bait (homogeneous 
 # blind ourselves between cycles.
 WATCH_PID=""
 WATCH_STARTED=""
+
+# Steady-state signal (#237): a watcher writes WATCH_READY_FILE and logs once it
+# is fully up - workers spawned AND (for atime) baselines captured. Tests wait on
+# this instead of racing the sub-second startup window with weak "armed?" gates.
+# Idempotent: a re-armed/reconciled watcher simply re-touches it.
+mark_ready() {
+    : > "${WATCH_READY_FILE:-/dev/null}" 2>/dev/null || true
+    log "watcher ready"
+}
+
+# atime-only: an "armed generation" bumped after EACH baseline (re)capture, so a
+# test can wait past a specific re-arm before simulating the next read (the
+# arm->baseline window is otherwise a race - see #235). One writer (the atime
+# poll subshell), so the plain counter is safe.
+mark_armed() {
+    ATIME_ARMED_GEN=$(( ${ATIME_ARMED_GEN:-0} + 1 ))
+    printf '%s' "$ATIME_ARMED_GEN" > "${ATIME_ARMED_FILE:-/dev/null}" 2>/dev/null || true
+}
 
 # Record sensor workers owned by the current supervisor. If that supervisor is
 # killed abruptly, its children are reparented and `pkill -P` can no longer find
@@ -762,6 +784,7 @@ watch_fifo() {  # supervisor: keep one serve_fifo alive per bait; restart any th
         i=$((i + 1))
     done
     update_fifo_worker_registry
+    mark_ready   # all FIFO writers spawned - steady state
     while :; do
         [ -e "${WATCH_STOP_FLAG:-/nonexistent}" ] && return 0
         i=1
@@ -830,6 +853,10 @@ watch_mixed() {
         write_watcher_workers $_worker_pids
     }
     update_mixed_worker_registry
+    # Steady state (#237): with atime companions, the backgrounded atime_poll marks
+    # ready after IT captures baselines (the last thing to come up, since the FIFO
+    # writers spawned above). With no atime baits, nothing else will - so mark here.
+    [ -z "$_atidx" ] && mark_ready
     # Supervise the FIFO writers, exactly like watch_fifo: a serve_fifo that dies
     # leaves its pipe on disk, so any reader's open() blocks forever and that bait
     # is silently blind until a full restart (Roee #160 N1). Re-check the stop flag
@@ -1042,6 +1069,8 @@ run() {
     BAITCACHE="$(dirname "$STATE_FILE")/bait"
     WATCH_STOP_FLAG="$(dirname "$STATE_FILE")/watcher.stopping"
     WATCH_WORKERS_FILE="$(dirname "$STATE_FILE")/watcher.workers"
+    WATCH_READY_FILE="$(dirname "$STATE_FILE")/ready"          # steady-state signal (#237)
+    ATIME_ARMED_FILE="$(dirname "$STATE_FILE")/atime_armed"    # atime re-arm generation (#237)
     mkdir -p "$(dirname "$STATE_FILE")"
     case "$SENSOR" in
         atime) FIFO_MODE=0; log "sensor: atime poll (regular-file bait, re-armable)" ;;
@@ -1067,6 +1096,9 @@ run() {
     # it. Never act on stale PIDs from an earlier boot/run: they may have been
     # reused by an unrelated process. Current-run supervisors recreate the file.
     rm -f "$WATCH_WORKERS_FILE"
+    # Clear any steady-state markers from a prior run so a test can't observe a
+    # stale "ready"/generation before THIS run's watcher actually comes up (#237).
+    rm -f "$WATCH_READY_FILE" "$ATIME_ARMED_FILE"
     remove_fifos
     resolve_target_user
 
@@ -1123,7 +1155,9 @@ run() {
     fi
 
     start_watcher
-    [ "$EPHEMERAL" = 1 ] && : > "$(dirname "$STATE_FILE")/ready" 2>/dev/null || true
+    # The steady-state `ready` marker is now written by the watcher itself, once
+    # workers are up and (for atime) baselines are captured - accurate in every
+    # mode, not just ephemeral, and no longer racing the sub-second startup (#237).
 
     # No live sync: behave as before - block on the watcher.
     if ! [ "$SYNC_INTERVAL" -gt 0 ] 2>/dev/null; then

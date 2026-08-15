@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 import pytest
 
+from agent_ready import wait_atime_gen, wait_ready
+
 AGENT = Path(__file__).resolve().parents[1] / "agent" / "thumper_agent.sh"
 BAIT_BODY = "AKIA-BAIT\nsecret=shhh\n"
 ARMED_MAX = (
@@ -144,9 +146,11 @@ def test_atime_sensor_is_rearmable(server, tmp_path):
     Stub.bait_path = str(bait)
     p = _spawn(server, tmp_path)
     try:
-        assert _wait(lambda: bait.exists() and _atime(bait) < ARMED_MAX), (
-            "bait not planted+armed"
-        )
+        # Wait for the atime watcher's steady-state signal (baseline captured)
+        # rather than racing the arm->baseline window with a bare "armed?" gate.
+        # The signal is emitted only AFTER the initial baseline read (#237).
+        assert wait_ready(tmp_path), "agent did not reach steady state"
+        assert bait.exists() and _atime(bait) < ARMED_MAX, "bait not planted+armed"
         # simulate read #1: bump atime forward (what a real read does under relatime)
         os.utime(bait, (time.time(), os.stat(bait).st_mtime))
         assert _wait(lambda: _atime_hits() >= 1), "read #1 was not detected"
@@ -154,11 +158,11 @@ def test_atime_sensor_is_rearmable(server, tmp_path):
         assert _wait(lambda: _atime(bait) < ARMED_MAX), (
             "bait was not re-armed after detection"
         )
-        # Let the re-arm fully settle before the next read. The agent re-arms in two
-        # steps (touch atime->past, then re-read the baseline); bumping atime in that
-        # ms-wide window would be captured AS the new baseline and missed. A real
-        # reader doesn't race the re-arm, so the test shouldn't either (one poll cycle).
-        time.sleep(2)
+        # The agent re-arms in two steps (touch atime->past, then re-read the
+        # baseline); bumping atime in that window would be captured AS the new
+        # baseline and missed. Wait for the armed generation to advance to 2 (the
+        # re-baseline after read #1) instead of a blind sleep settle (#235/#237).
+        assert wait_atime_gen(tmp_path, 2), "atime baseline was not re-captured after read #1"
         # simulate read #2
         os.utime(bait, (time.time(), os.stat(bait).st_mtime))
         assert _wait(lambda: _atime_hits() >= 2), (
